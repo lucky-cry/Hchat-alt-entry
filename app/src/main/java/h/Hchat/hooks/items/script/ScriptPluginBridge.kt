@@ -8,7 +8,6 @@ import android.os.Looper
 import android.view.View
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
-import de.robv.android.xposed.XposedHelpers
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -451,7 +450,7 @@ class ScriptPluginBridge internal constructor(
     }
 
     fun findClass(className: String): Class<*> {
-        return XposedHelpers.findClass(className, classLoader)
+        return KavaReflector.loadClass(className, classLoader)
     }
 
     fun firstMethod(instance: Any?, methodName: String?): Method? = firstMethod(instance, methodName, -1)

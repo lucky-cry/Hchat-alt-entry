@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.res.Resources
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
-import de.robv.android.xposed.XposedHelpers
 import h.Hchat.utils.HLog
 
 object ModuleResourceMenuFallback {

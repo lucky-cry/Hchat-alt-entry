@@ -1,6 +1,5 @@
 package h.Hchat.hooks.core
 
-import de.robv.android.xposed.XC_MethodHook
 import java.lang.reflect.Member
 
 /**
@@ -44,45 +43,5 @@ class NoopHookEngine : HookEngine {
     override fun hook(method: Member, callback: HookCallback): Any? {
         h.Hchat.utils.HLog.e("[Hchat:Hook] 引擎未注入，跳过挂载: ${method.name}")
         return null
-    }
-}
-
-/** 基于 legacy Xposed API 的引擎，行为与现有代码完全一致。 */
-class LegacyHookEngine : HookEngine {
-    override fun hook(method: Member, callback: HookCallback): Any? {
-        return HookRegistry.get().hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
-                callback.before(LegacyHookParam(param))
-            }
-
-            override fun afterHookedMethod(param: MethodHookParam) {
-                callback.after(LegacyHookParam(param))
-            }
-        })
-    }
-
-    private class LegacyHookParam(private val param: XC_MethodHook.MethodHookParam) : HookParam {
-        override val executable: java.lang.reflect.Member? get() = param.method
-        override val thisObject: Any? get() = param.thisObject
-        override val args: Array<Any?> get() = param.args as? Array<Any?> ?: arrayOfNulls(0)
-        override var result: Any?
-            get() = param.result
-            set(value) {
-                param.result = value
-            }
-
-        override val hasThrowable: Boolean get() = param.hasThrowable()
-
-        override fun getObjectExtra(key: String): Any? = param.getObjectExtra(key)
-
-        override fun setObjectExtra(key: String, value: Any?) {
-            param.setObjectExtra(key, value)
-        }
-        override var throwable: Throwable?
-            get() = param.throwable
-            set(value) {
-                param.throwable = value
-            }
-
     }
 }

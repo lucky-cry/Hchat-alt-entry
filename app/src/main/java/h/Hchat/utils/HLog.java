@@ -35,15 +35,13 @@ public final class HLog {
                 // 落到 legacy，避免日志本身把功能打断
             }
         }
-        LegacySink.log(message, throwable);
+        LogcatSink.log(message, throwable);
     }
 
-    /** 单独成类，保证 102 环境下不会被提前加载。 */
-    private static final class LegacySink {
+    /** 兜底输出：Sink 未注入时写 logcat（102 环境不存在 legacy XposedBridge）。 */
+    private static final class LogcatSink {
         static void log(String message, Throwable throwable) {
-            de.robv.android.xposed.XposedBridge.log(
-                    throwable == null ? new RuntimeException(message)
-                            : new RuntimeException(message, throwable));
+            android.util.Log.e("Hchat", message, throwable);
         }
     }
 }

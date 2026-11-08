@@ -24,7 +24,6 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
-import de.robv.android.xposed.XposedBridge;
 
 /**
  * SettingsDexFinder - 使用 DexKit 解析微信设置页相关类和方法
@@ -686,7 +685,7 @@ public class SettingsDexFinder {
 
     private void logDetail(String message) {
         if (VERBOSE) {
-            XposedBridge.log(TAG + " " + message);
+            h.Hchat.utils.HLog.e(TAG + " " + message);
         }
     }
 

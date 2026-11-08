@@ -39,8 +39,6 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
 
@@ -392,7 +390,7 @@ public class ModuleEntry {
 
     private ClassLoader resolveTinkerClassLoader(Object tinkerApplication) {
         try {
-            Object value = XposedHelpers.callMethod(tinkerApplication, "getClassLoader");
+            Object value = KavaReflector.invoke(KavaReflector.findMethod(tinkerApplication.getClass(), "getClassLoader"), tinkerApplication);
             return value instanceof ClassLoader ? (ClassLoader) value : null;
         } catch (Throwable ignored) {
             return null;

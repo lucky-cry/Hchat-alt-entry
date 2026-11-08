@@ -1,7 +1,5 @@
 package h.Hchat.hooks.core
 
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
 import java.lang.reflect.Member
 import java.util.concurrent.CancellationException
 
@@ -10,7 +8,7 @@ import java.util.concurrent.CancellationException
  */
 class HookRegistry private constructor() {
     private val lock = Any()
-    private val unhooks = ArrayList<XC_MethodHook.Unhook>()
+    private val unhooks = ArrayList<Any>()
     private val extraHandles = ArrayList<Any>()
     private val installationLease = ThreadLocal<Long>()
     @Volatile private var generation = 0L
@@ -119,45 +117,15 @@ class HookRegistry private constructor() {
     /** 迁移期重载：接受引擎返回的任意句柄（HookHandle 或 Unhook）。 */
     fun add(handle: Any?) {
         if (handle == null) return
-        if (handle is XC_MethodHook.Unhook) {
-            add(handle)
-            return
-        }
         synchronized(lock) { extraHandles.add(handle) }
     }
 
-    fun hook(method: Member, callback: XC_MethodHook): XC_MethodHook.Unhook = synchronized(lock) {
-        if (!isInstallationGenerationActive(installationGeneration())) {
-            throw CancellationException("安装代次已失效")
-        }
-        val unhook = XposedBridge.hookMethod(method, callback)
-        if (unhook != null) {
-            unhooks.add(unhook)
-        }
-        unhook
-    }
-
-    fun add(unhook: XC_MethodHook.Unhook?) {
-        if (unhook == null) return
-        synchronized(lock) {
-            if (isInstallationGenerationActive(installationGeneration())) {
-                unhooks.add(unhook)
-                return
-            }
-        }
-        unhook.unhook()
-        throw CancellationException("安装代次已失效")
-    }
 
     fun size(): Int = synchronized(lock) { unhooks.size }
 
     /** 迁移期统一卸载：兼容 legacy Unhook 与 libxposed HookHandle。 */
     fun unhookHandle(handle: Any?) {
         if (handle == null) return
-        if (handle is XC_MethodHook.Unhook) {
-            unhook(handle)
-            return
-        }
         runCatching {
             val close = handle.javaClass.methods.firstOrNull {
                 it.name == "close" || it.name == "unhook"
@@ -166,13 +134,6 @@ class HookRegistry private constructor() {
             close.invoke(handle)
         }
         synchronized(lock) { extraHandles.remove(handle) }
-    }
-
-    fun unhook(unhook: XC_MethodHook.Unhook?) {
-        if (unhook == null) return
-        unhook.unhook()
-        // Xposed 解除回调后，还必须释放模块注册表持有的句柄及脚本解释器。
-        synchronized(lock) { unhooks.remove(unhook) }
     }
 
     fun unhookAll() {

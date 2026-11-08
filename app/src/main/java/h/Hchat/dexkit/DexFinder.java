@@ -30,7 +30,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
-import de.robv.android.xposed.XposedBridge;
 
 /**
  * DexFinder - 使用 DexKit 定位微信混淆后的类和方法
@@ -6249,7 +6248,7 @@ public class DexFinder {
 
     private void logDetail(String message) {
         if (VERBOSE) {
-            XposedBridge.log(TAG + " " + message);
+            h.Hchat.utils.HLog.e(TAG + " " + message);
         }
     }
 

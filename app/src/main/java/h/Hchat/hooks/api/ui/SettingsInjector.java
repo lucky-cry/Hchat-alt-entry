@@ -30,7 +30,6 @@ import java.util.Map;
 
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
-import de.robv.android.xposed.XposedHelpers;
 
 import h.Hchat.dexkit.SettingsDexFinder;
 import h.Hchat.hooks.core.HookRegistry;
@@ -163,7 +162,7 @@ public class SettingsInjector {
 
         try {
             // Hook SettingsUI.initView()
-            HookRegistry.get().add(XposedHelpers.findAndHookMethod(dex.settingsUIClass, "initView",
+            HookRegistry.get().add(HookRegistry.get().hookMethod(dex.settingsUIClass, "initView", new Class<?>[0],
                     new HookCallback() {
                         @Override
                         public void after(HookParam param) {
@@ -598,8 +597,8 @@ public class SettingsInjector {
 
     private void hookTitleStringResource() {
         if (contextGetStringUnhook != null) return;
-        contextGetStringUnhook = XposedHelpers.findAndHookMethod(
-                Context.class, "getString", int.class,
+        contextGetStringUnhook = HookRegistry.get().hookMethod(
+                Context.class, "getString", new Class<?>[]{int.class},
                 new HookCallback() {
                     @Override
                     public void before(HookParam param) {
@@ -685,7 +684,7 @@ public class SettingsInjector {
             if (launcherClass == null) return;
 
             // Hook onCreate
-            HookRegistry.get().add(XposedHelpers.findAndHookMethod(launcherClass, "onCreate",
+            HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onCreate", new Class<?>[0],
                     android.os.Bundle.class,
                     new HookCallback() {
                         @Override
@@ -702,7 +701,7 @@ public class SettingsInjector {
                     }));
 
             // Hook onNewIntent
-            HookRegistry.get().add(XposedHelpers.findAndHookMethod(launcherClass, "onNewIntent",
+            HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onNewIntent", new Class<?>[]{android.content.Intent.class},
                     Intent.class,
                     new HookCallback() {
                         @Override

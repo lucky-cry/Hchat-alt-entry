@@ -2,7 +2,6 @@ package h.Hchat.hooks.items.messageblock
 
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
-import de.robv.android.xposed.callbacks.XCallback
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.model.WeChatMessage
