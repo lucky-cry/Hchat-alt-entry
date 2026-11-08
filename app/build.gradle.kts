@@ -82,6 +82,7 @@ android {
             excludes += "android/attrs.xml"
             excludes += "android/attrs_manifest.xml"
             excludes += "android/res-map.txt"
+            merges += "META-INF/xposed/*"
             excludes += "clst/core.jcst"
             excludes += "export/**"
             excludes += "jadx/core/deobf/conditions/tlds.txt"
@@ -97,6 +98,8 @@ kotlin {
 
 dependencies {
     compileOnly("de.robv.android.xposed:api:82")
+    // 迁移目标：libxposed API 102（与参考项目 BetterHeybox 一致）
+    compileOnly("io.github.libxposed:api:102.0.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     implementation("io.github.billywei01:fastkv:3.0.1")
