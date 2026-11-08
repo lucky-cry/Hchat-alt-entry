@@ -44,6 +44,7 @@ import h.Hchat.crash.CrashReportRuntime
 import h.Hchat.crash.CrashReportSettings
 import h.Hchat.crash.CrashReportSettingsProvider
 import h.Hchat.hooks.api.ui.HchatAgentIconDrawable
+import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.hooks.items.floatingshortcut.FloatingShortcutFeature
 import h.Hchat.hooks.items.script.market.PluginMarketClient
 import h.Hchat.hooks.items.script.market.PluginMarketSettings
@@ -504,8 +505,8 @@ import h.Hchat.ui.FeatureSettingsProvider
 import h.Hchat.ui.UIRegistry
 import h.Hchat.utils.KavaReflector
 import h.Hchat.utils.KeywordReplacementRule
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import org.json.JSONArray
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
@@ -1074,7 +1075,7 @@ object MiuixSettingsPage {
         val configVersion = mutableStateOf(0)
         val settingsBackHandlers = SettingsBackHandlerRegistry()
         lateinit var page: FrameLayout
-        val activityBackHooks = ArrayList<XC_MethodHook.Unhook>()
+        val activityBackHooks = ArrayList<HookCallback.Unhook>()
         var consumingBack = false
         var closed = false
         var agentExitHandler: (() -> Unit)? = null
@@ -1128,8 +1129,8 @@ object MiuixSettingsPage {
         if (floatingAgent) hostTag.collapseAgent = { closePage() }
         fun installActivityBackHooks() {
             if (activityBackHooks.isNotEmpty()) return
-            val keyHook = object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            val keyHook = object : HookCallback {
+                override fun before(param: HookParam) {
                     val event = param.args.firstOrNull { it is KeyEvent } as? KeyEvent ?: return
                     if (event.keyCode != KeyEvent.KEYCODE_BACK || page.parent == null) return
                     if (event.action == KeyEvent.ACTION_UP) {
@@ -1138,8 +1139,8 @@ object MiuixSettingsPage {
                     param.result = true
                 }
             }
-            val pressedHook = object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            val pressedHook = object : HookCallback {
+                override fun before(param: HookParam) {
                     if (page.parent == null) return
                     handleBack()
                     param.result = null
@@ -1147,19 +1148,19 @@ object MiuixSettingsPage {
             }
             listOf(Activity::class.java, activity.javaClass).forEach { clazz ->
                 try {
-                    activityBackHooks.addAll(XposedBridge.hookAllMethods(clazz, "dispatchKeyEvent", keyHook))
+                    activityBackHooks.addAll(HookRegistry.get().hookAllMethods(clazz, "dispatchKeyEvent", keyHook))
                 } catch (_: Throwable) {
                 }
                 try {
-                    activityBackHooks.addAll(XposedBridge.hookAllMethods(clazz, "onKeyDown", keyHook))
+                    activityBackHooks.addAll(HookRegistry.get().hookAllMethods(clazz, "onKeyDown", keyHook))
                 } catch (_: Throwable) {
                 }
                 try {
-                    activityBackHooks.addAll(XposedBridge.hookAllMethods(clazz, "onKeyUp", keyHook))
+                    activityBackHooks.addAll(HookRegistry.get().hookAllMethods(clazz, "onKeyUp", keyHook))
                 } catch (_: Throwable) {
                 }
                 try {
-                    activityBackHooks.addAll(XposedBridge.hookAllMethods(clazz, "onBackPressed", pressedHook))
+                    activityBackHooks.addAll(HookRegistry.get().hookAllMethods(clazz, "onBackPressed", pressedHook))
                 } catch (_: Throwable) {
                 }
             }
@@ -1460,8 +1461,8 @@ internal object NativeFakeLocationPickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         runCatching {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != FAKE_LOCATION_WECHAT_PICKER_REQUEST_CODE) return
                     val result = takePending() ?: return
@@ -1576,8 +1577,8 @@ internal object RingtonePickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != RINGTONE_SYSTEM_REQUEST_CODE && requestCode != RINGTONE_FILE_REQUEST_CODE) return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return
@@ -1683,8 +1684,8 @@ internal object ScriptPluginAgentAttachmentPickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != SCRIPT_AGENT_ATTACHMENT_REQUEST_CODE) return
                     val pending = takePending() ?: return
@@ -1848,8 +1849,8 @@ internal object PluginMarketExtraFilePickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (!hookedClasses.add(clazz)) return
         runCatching {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != PLUGIN_MARKET_EXTRA_FILE_REQUEST_CODE) return
                     val result = takePending() ?: return
@@ -1985,8 +1986,8 @@ internal object RedPacketReplyFilePickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != REDPACKET_REPLY_FILE_REQUEST_CODE) return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return
@@ -2098,8 +2099,8 @@ internal object AutoReplyFilePickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != AUTO_REPLY_FILE_REQUEST_CODE) return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return
@@ -2211,8 +2212,8 @@ internal object ScheduledTaskFilePickerBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != SCHEDULED_TASK_FILE_REQUEST_CODE) return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return
@@ -2347,8 +2348,8 @@ internal object AudioTransformDocumentBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != AUDIO_TRANSFORM_INPUT_REQUEST_CODE &&
                         requestCode != AUDIO_TRANSFORM_OUTPUT_REQUEST_CODE
@@ -2493,8 +2494,8 @@ internal object ScriptPluginDocumentBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != SCRIPT_PLUGIN_EXPORT_REQUEST_CODE &&
                         requestCode != SCRIPT_PLUGIN_IMPORT_REQUEST_CODE
@@ -2593,8 +2594,8 @@ internal object ConfigImportExportBridge {
     private fun hookActivityResult(clazz: Class<*>) {
         if (hookedClasses.contains(clazz)) return
         try {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     if (requestCode != CONFIG_EXPORT_REQUEST_CODE && requestCode != CONFIG_IMPORT_REQUEST_CODE) return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return
