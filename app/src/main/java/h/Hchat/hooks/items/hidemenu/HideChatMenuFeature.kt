@@ -81,7 +81,7 @@ private class HideChatMenuRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+            HookRegistry.get().hook(method, object : HookCallback {
                 override fun after(param: HookParam) {
                     hideConfiguredItems(param.args?.getOrNull(0))
                 }

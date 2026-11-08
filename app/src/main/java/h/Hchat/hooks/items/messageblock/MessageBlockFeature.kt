@@ -46,7 +46,7 @@ class MessageBlockFeature : BaseFeature() {
                 if (method.returnType != Void.TYPE) continue
                 val addMsgArgIndexes = addMsgArgIndexes(method, parser)
                 if (addMsgArgIndexes.isEmpty()) continue
-                HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                HookRegistry.get().hook(method, object : HookCallback {
                     override fun before(param: HookParam) {
                         val args = param.args ?: return
                         val settings = MessageBlockSettings(context.hostContext())

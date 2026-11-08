@@ -346,7 +346,7 @@ private class HomeTextColorRuntime(
     private fun installAdapterHook(method: Method?, kind: RowKind): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+            HookRegistry.get().hook(method, object : HookCallback {
                 override fun before(param: HookParam) {
                     (param.args?.getOrNull(1) as? View)?.let {
                         deferredConversationRows.remove(it)
@@ -387,7 +387,7 @@ private class HomeTextColorRuntime(
             modernConversationHolderInstalled = runCatching {
                 HookRegistry.get().hook(
                     methods.holder,
-                    object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                    object : HookCallback {
                         override fun after(param: HookParam) {
                             if (destroyed || param.hasThrowable()) return
                             val holder = param.args?.getOrNull(0) ?: return
@@ -410,7 +410,7 @@ private class HomeTextColorRuntime(
             modernConversationBindInstalled = runCatching {
                 HookRegistry.get().hook(
                     methods.bind,
-                    object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                    object : HookCallback {
                         override fun before(param: HookParam) {
                             val holder = param.args?.getOrNull(1) ?: return
                             val row = modernConversationRows[holder]?.get() ?: return
@@ -599,7 +599,7 @@ private class HomeTextColorRuntime(
     private fun installLayoutInflaterHook(method: Method?): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+            HookRegistry.get().hook(method, object : HookCallback {
                 override fun after(param: HookParam) {
                     if (destroyed || param.hasThrowable()) return
                     val view = param.result as? View ?: return
@@ -757,7 +757,7 @@ private class HomeTextColorRuntime(
     private fun installRecyclerAdapterHook(method: Method?, label: String): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+            HookRegistry.get().hook(method, object : HookCallback {
                 override fun before(param: HookParam) {
                     findRootView(param.args?.getOrNull(0))?.let {
                         deferredConversationRows.remove(it)
