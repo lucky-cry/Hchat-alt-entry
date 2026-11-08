@@ -43,7 +43,7 @@ public class DexFinder {
     private static final String CACHE_COMPLETE = "cache.complete";
     private static final String CACHE_KEY = "cache.key";
     private static final String CACHE_SNAPSHOT_VERSION_KEY = "cache.snapshot.version";
-    private static final String CACHE_SNAPSHOT_VERSION = "2";
+    private static final String CACHE_SNAPSHOT_VERSION = "3";
     private static final String SEND_TEXT_LOCATOR_VERSION_KEY = "send.text.locator.version";
     private static final String SEND_TEXT_LOCATOR_VERSION = "1";
     private static final String CACHE_SEND_TEXT_LOCATOR_RESOLVED = "locator.send.text.resolved";
