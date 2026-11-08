@@ -4,6 +4,8 @@ import android.content.ContentValues;
 import android.database.Cursor;
 import android.text.TextUtils;
 
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 import h.Hchat.dexkit.DexFinder;
 import h.Hchat.hooks.api.model.DatabaseChange;
 import h.Hchat.hooks.core.HookRegistry;
@@ -270,23 +272,23 @@ public final class WeChatDatabaseListenerApi {
                 continue;
             }
             try {
-                HookRegistry.get().hook(method, new XC_MethodHook(de.robv.android.xposed.callbacks.XCallback.PRIORITY_LOWEST) {
+                HookRegistry.get().hook(method, new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
+                    public void before(HookParam param) {
                         if (query) {
-                            if (enterQuery()) transformQuery(param.args);
+                            if (enterQuery()) transformQuery(param.getArgs());
                         } else {
                             enterMutation();
-                            normalizeLegacyMsgSource(operation, param.thisObject, param.args);
+                            normalizeLegacyMsgSource(operation, param.getThisObject(), param.getArgs());
                         }
                     }
 
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
+                    public void after(HookParam param) {
                         if (query) {
                             leaveQuery();
                         } else if (leaveMutation()) {
-                            dispatchIfSuccessful(operation, method, param.args, param.getResult());
+                            dispatchIfSuccessful(operation, method, param.getArgs(), param.getResult());
                         }
                     }
                 });

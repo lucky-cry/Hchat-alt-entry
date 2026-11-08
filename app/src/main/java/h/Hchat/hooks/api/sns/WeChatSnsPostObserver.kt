@@ -64,8 +64,8 @@ class WeChatSnsPostObserver(
             }
             ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (suppressDispatch.get() == true) return
                     if (param.result != true) return
                     val snsInfo = param.args?.firstOrNull {

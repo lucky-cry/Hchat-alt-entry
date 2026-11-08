@@ -50,8 +50,8 @@ class WeChatLocalMessageApi(
         val method = finder.localMessageCreateTimeMethod ?: return false
         synchronized(this) {
             if (createTimeHookInstalled) return true
-            HookRegistry.get().hook(method, object : HookCallback() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val pending = pendingCreateTime.get() ?: return
                     val args = param.args ?: return
                     val talker = args.getOrNull(0) as? String ?: return

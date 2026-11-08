@@ -134,8 +134,8 @@ class WeChatTransferApi(
         if (queryHookInstalled) return true
         val method = dexFinder?.transferQueryResponseMethod ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     val callback = pendingQueries.remove(param.thisObject) ?: return
                     callback(
                         QueryResult(

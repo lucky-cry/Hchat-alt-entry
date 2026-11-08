@@ -77,22 +77,22 @@ internal object SnsContextMenuDispatcher {
         this.resolver = resolver
         this.logger = logger
         val createHooked = SnsContextMenuLocator.menuCreateMethods(context, logger).count { method ->
-            hook(method, object : HookCallback() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addMenus(param)
                 }
             })
         }
         val clickHooked = SnsContextMenuLocator.menuClickMethods(context, logger).count { method ->
-            hook(method, object : HookCallback() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     handleClick(param)
                 }
             })
         }
         val foldHooked = SnsContextMenuLocator.foldBindCompletionMethods(context, logger).count { method ->
-            hook(method, object : HookCallback() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     bindFoldLongClick(param)
                 }
             })
