@@ -85,7 +85,7 @@ class AntiRecallFeature : BaseFeature() {
                                 if (!handleRecall(context, talker, svrId, recalledInfo, recallTime)) return
                                 markHandled(handledKey)
                             }
-                            param.setResult(null)
+                            param.result = null
                         }
                     })
                     installed = true
@@ -223,7 +223,7 @@ class AntiRecallFeature : BaseFeature() {
                         val outgoing = selfRecallMsgIds.contains(msgId) || messageObjectIsSend(msg)
                         if (!outgoing) return
                         markSelfRecallMsgId(msgId)
-                        param.setResult(blockedReturnValue(method))
+                        param.result = blockedReturnValue(method)
                     }
                 })
                 installed = true
@@ -247,7 +247,7 @@ class AntiRecallFeature : BaseFeature() {
                     override fun before(param: HookParam) {
                         if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                         if (!shouldBlockMsgProcessingClear(param.args)) return
-                        param.setResult(null)
+                        param.result = null
                     }
                 })
                 installed = true
@@ -268,7 +268,7 @@ class AntiRecallFeature : BaseFeature() {
                     override fun before(param: HookParam) {
                         if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                         if (!shouldBlockLegacySelfRecallMediaCleanup(param.args)) return
-                        param.setResult(null)
+                        param.result = null
                     }
                 })
                 installed = true
