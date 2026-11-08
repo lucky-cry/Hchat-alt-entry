@@ -421,8 +421,7 @@ public class SettingsInjector {
             // 找到返回 SettingLocation 的方法
             for (Method m : KavaReflector.declaredMethods(childSettingItemClass)) {
                 if (m.getReturnType() == dex.settingLocationClass) {
-                    HookRegistry.get().hook(m, new HookCallback(
-                            de.robv.android.xposed.callbacks.XCallback.PRIORITY_HIGHEST) {
+                    HookRegistry.get().hook(m, new HookCallback() {
                         @Override
                         public void after(HookParam param) {
                             try {
