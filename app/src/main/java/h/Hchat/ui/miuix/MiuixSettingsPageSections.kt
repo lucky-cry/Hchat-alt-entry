@@ -501,7 +501,6 @@ import h.Hchat.ui.UIRegistry
 import h.Hchat.utils.KavaReflector
 import h.Hchat.utils.KeywordReplacementRule
 
-import de.robv.android.xposed.XposedBridge
 import org.json.JSONArray
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar

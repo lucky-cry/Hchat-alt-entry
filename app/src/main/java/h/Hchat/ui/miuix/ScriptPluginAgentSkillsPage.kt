@@ -32,9 +32,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
-import de.robv.android.xposed.XposedBridge
 import h.Hchat.hooks.items.script.agent.ScriptPluginAgentSkills
 import h.Hchat.utils.HLog
 import java.lang.ref.WeakReference
@@ -424,7 +424,7 @@ private object SkillDocumentPicker {
     private fun hook(clazz: Class<*>): Boolean {
         if (clazz in hookedClasses) return true
         return try {
-            val hooks = XposedBridge.hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+            val hooks = HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
                 override fun after(param: HookParam) {
                     if (param.args.getOrNull(0) != REQUEST_CODE) return
                     val request = synchronized(this@SkillDocumentPicker) {
