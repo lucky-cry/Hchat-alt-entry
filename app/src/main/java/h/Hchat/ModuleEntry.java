@@ -407,6 +407,10 @@ public class ModuleEntry implements IXposedHookLoadPackage {
 
     private void initModule(Context hostContext, XC_LoadPackage.LoadPackageParam lpparam) {
         try {
+            // 构建标记：日志里用它区分实机现在跑的是哪一版（排查「装了没生效」）。
+            HLog.e(TAG + " 构建标记 build=" + h.Hchat.BuildConfig.VERSION_NAME
+                    + " code=" + h.Hchat.BuildConfig.VERSION_CODE
+                    + " diag=DBWRAP-2");
             // 1. 加载 Native 库（DexKit）
             NativeLibraryLoader nativeLibraryLoader = new NativeLibraryLoader();
             nativeLibraryLoader.loadDexKit(hostContext, getClass().getClassLoader());
