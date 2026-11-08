@@ -18,6 +18,12 @@ class HookRegistry private constructor() {
 
     fun isInstallationGenerationActive(generation: Long): Boolean = this.generation == generation
 
+    /** 迁移入口：功能层通过 HookCallback 挂载，引擎可替换为 libxposed 实现。 */
+    private val engine: HookEngine = LegacyHookEngine()
+
+    fun hookForMigration(method: Member, callback: HookCallback): Any? =
+        engine.hook(method, callback)
+
     fun <T> withInstallationGeneration(generation: Long, action: () -> T): T {
         val previous = installationLease.get()
         if (!isInstallationGenerationActive(generation) || previous != null && previous != generation) {
