@@ -20,7 +20,7 @@ class HookRegistry private constructor() {
     fun isInstallationGenerationActive(generation: Long): Boolean = this.generation == generation
 
     /** 迁移入口：功能层通过 HookCallback 挂载，引擎可替换为 libxposed 实现。 */
-    @Volatile private var engine: HookEngine = LegacyHookEngine()
+    @Volatile private var engine: HookEngine = NoopHookEngine()
 
     /** 由入口按运行环境注入：legacy 用 LegacyHookEngine，102 用 LibxposedHookEngine。 */
     fun setEngine(newEngine: HookEngine) {

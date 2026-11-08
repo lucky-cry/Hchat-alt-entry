@@ -17,6 +17,10 @@ import io.github.libxposed.api.XposedModuleInterface
 class HchatModule : XposedModule() {
 
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
+        // 先注入 102 引擎，避免任何 legacy 类被加载。
+        h.Hchat.hooks.core.HookRegistry.get().setEngine(
+            h.Hchat.hooks.core.LibxposedHookEngine(this)
+        )
         HLog.installSink { message, throwable ->
             if (throwable == null) {
                 log(Log.ERROR, "Hchat", message)

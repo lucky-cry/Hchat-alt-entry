@@ -39,6 +39,14 @@ interface HookEngine {
     fun hook(method: Member, callback: HookCallback): Any?
 }
 
+/** 占位引擎：尚未注入真实引擎时使用，避免初始化阶段触碰 legacy 类。 */
+class NoopHookEngine : HookEngine {
+    override fun hook(method: Member, callback: HookCallback): Any? {
+        h.Hchat.utils.HLog.e("[Hchat:Hook] 引擎未注入，跳过挂载: ${method.name}")
+        return null
+    }
+}
+
 /** 基于 legacy Xposed API 的引擎，行为与现有代码完全一致。 */
 class LegacyHookEngine : HookEngine {
     override fun hook(method: Member, callback: HookCallback): Any? {
