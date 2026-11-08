@@ -128,3 +128,23 @@ LSPosed 里能看到模块、能勾选作用域，**日志里没有模块输出�
 
 随后发一个普通红包，应出现 `普通红包请求类缺失，回退 Union 请求`，
 并能看到 `静默收包` / `拆红包请求已发送`。
+
+### 2026-11-08 23:37 test.70 实测
+
+已通过 GitHub Actions 构建并安装 test.70（code 670），小米 K90 Pro Max /
+Android 17 / 微信 8.0.80 / LSPosed 2.2.1 实测：
+
+```text
+[Hchat:DexFinder] 红包Union补解析结果: receive=true open=true
+[Hchat:DexFinder] 网络队列候选命中: com.tencent.mm.modelbase.s1
+[Hchat:DexFinder] 网络队列解析: class=com.tencent.mm.modelbase.s1
+    candidates=53 resolved=true receive=false receiveUnion=true open=false openUnion=true
+[Hchat:NetQueue] Hook成功: com.tencent.mm.modelbase.s1 methods=3
+[Hchat:NetQueue] 缓存发包器: com.tencent.mm.modelbase.s1#h
+```
+
+`#h` 是 `h(n1, int) -> boolean`，即真正的入队/发包方法；`g(n1)` 只是
+`return h(n1, 0)`。到此网络队列定位与 Hook 已验证通过。
+
+普通红包的 Union 回退还需要收一个真实红包后看
+`普通红包请求类缺失，回退 Union 请求` 与后续 `静默收包` / `拆红包请求已发送`。
