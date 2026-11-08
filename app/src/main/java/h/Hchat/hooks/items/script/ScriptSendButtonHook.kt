@@ -191,7 +191,7 @@ object ScriptSendButtonHook {
         return runCatching {
             HookRegistry.get().hook(attachMethod, object : HookCallback {
                 override fun after(param: HookParam) {
-                    trackInputView(findInputView(param.thisObject))
+                    trackInputView(findInputView(param.thisObject ?: return))
                 }
             })
             true

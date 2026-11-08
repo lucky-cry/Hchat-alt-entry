@@ -585,15 +585,11 @@ class ScriptPluginBridge internal constructor(
         }
     }
 
-    fun unhook(pluginId: String?, unhook: Any?) {
-        if (pluginId != null && unhook != null) {
-            pluginHooks[pluginId]?.remove(unhook)
-        }
-        unhook(unhook)
-    }
-
     fun unhook(pluginId: String?, handle: Any?) {
-        unhook(pluginId, handle as? Any)
+        if (pluginId != null && handle != null) {
+            pluginHooks[pluginId]?.remove(handle)
+        }
+        HookRegistry.get().unhookHandle(handle)
     }
 
     fun unhookPlugin(pluginId: String?) {

@@ -104,15 +104,15 @@ object ModuleResourceMenuFallback {
                         if (args.size < 4) return
                         val resId = args[3] as? Int ?: return
                         if (resId == 0) return
-                        val context = contextOf(param.thisObject) ?: return
+                        val context = contextOf(param.thisObject ?: return) ?: return
 
                         val entry = ModuleResources.entryName(context, resId)
-                        val hostRes = resourcesOf(param.thisObject)
+                        val hostRes = resourcesOf(param.thisObject ?: return)
                         val hostIsString = hostRes != null && runCatching {
                             hostRes.getResourceTypeName(resId)
                         }.getOrNull() == "string"
 
-                        val termuxMenu = isTermuxSelectionMenu(param.thisObject)
+                        val termuxMenu = isTermuxSelectionMenu(param.thisObject ?: return)
                         val label: CharSequence? = when {
                             entry != null && LABELS.containsKey(entry) && (!hostIsString || termuxMenu) ->
                                 LABELS[entry]
@@ -122,7 +122,7 @@ object ModuleResourceMenuFallback {
                             else -> null
                         }
                         if (label == null) return
-                        if (termuxMenu) markSelectionMenu(param.thisObject)
+                        if (termuxMenu) markSelectionMenu(param.thisObject ?: return)
 
                         val item = runCatching {
                             XposedHelpers.callMethod(
