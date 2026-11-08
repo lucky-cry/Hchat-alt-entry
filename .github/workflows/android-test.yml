@@ -43,7 +43,7 @@ jobs:
           fi
 
           echo "HCAT_VERSION_NAME=test.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
-          echo "HCAT_VERSION_CODE=$((900000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "HCAT_VERSION_CODE=$((600 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
           echo "HCAT_APK_NAME=${apk_name}" >> "$GITHUB_ENV"
 
           sed -i '/android.aapt2FromMavenOverride/d' gradle.properties

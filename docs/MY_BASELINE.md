@@ -15,7 +15,8 @@
 
 ```text
 正式包：versionName 6.4.x（workflow 自动递增），versionCode = 600 + run_number
-测试包：versionName test.N，versionCode = 900000 + run_number（永远高于正式包，不会被判降级）
+测试包：versionName test.N，versionCode = 600 + run_number（与正式包共用同一递增序列，
+       按构建先后自然递增，互相覆盖都不会被判降级）
 签名：自有 app/keystore/release.jks（不进仓库），密码走 GitHub Secrets
 ```
 
