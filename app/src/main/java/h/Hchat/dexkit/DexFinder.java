@@ -643,13 +643,31 @@ public class DexFinder {
                 if (sendClass != null) netQueueClass = sendClass;
             }
             if (netQueueClass == null) {
-                // 8.0.80 兜底：红包请求类可能已变化，改按「dispatch/add + 非基本类型参数 + 布尔返回」找队列。
+                // 8.0.80 兜底1：按常见方法名 + 形状找队列类。
                 for (Class<?> candidate : netQueueCandidateClasses) {
                     if (hasQueueLikeDispatchMethod(candidate)) {
                         netQueueClass = candidate;
-                        h.Hchat.utils.HLog.e(TAG + " 网络队列兜底命中: " + candidate.getName());
+                        h.Hchat.utils.HLog.e(TAG + " 网络队列兜底1命中: " + candidate.getName());
                         break;
                     }
+                }
+            }
+            if (netQueueClass == null) {
+                // 8.0.80 兜底2：方法名已被混淆，改为只看签名形状
+                // (任意非基本类型请求, int) -> boolean/int，且类里此类方法数量唯一或最多。
+                Class<?> best = null;
+                int bestScore = 0;
+                for (Class<?> candidate : netQueueCandidateClasses) {
+                    int score = countQueueShapedMethods(candidate);
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = candidate;
+                    }
+                }
+                if (best != null) {
+                    netQueueClass = best;
+                    h.Hchat.utils.HLog.e(TAG + " 网络队列兜底2命中: " + best.getName()
+                            + " 形状方法数=" + bestScore);
                 }
             }
 
@@ -5624,6 +5642,36 @@ public class DexFinder {
         } catch (Throwable ignored) {
         }
         return false;
+    }
+
+
+    /** 统计类中「(非基本类型请求[, int]) -> boolean/int/void」形状的方法数，用于兜底挑队列类。 */
+    private int countQueueShapedMethods(Class<?> cl) {
+        if (cl == null) return 0;
+        int score = 0;
+        try {
+            Class<?> cur = cl;
+            while (cur != null && cur != Object.class) {
+                for (Method method : KavaReflector.declaredMethods(cur)) {
+                    String name = method.getName();
+                    if ("equals".equals(name) || "hashCode".equals(name) || "toString".equals(name)
+                            || "wait".equals(name) || "notify".equals(name) || "notifyAll".equals(name)
+                            || "cancel".equals(name) || "<init>".equals(name)) continue;
+                    Class<?>[] params = method.getParameterTypes();
+                    if (params == null || (params.length != 1 && params.length != 2)) continue;
+                    if (params.length == 2 && params[1] != int.class && params[1] != Integer.class) continue;
+                    Class<?> first = params[0];
+                    if (first == null || first.isPrimitive() || first == String.class
+                            || first == Object.class || first.isArray()) continue;
+                    Class<?> rt = method.getReturnType();
+                    if (rt == boolean.class || rt == Boolean.class || rt == int.class
+                            || rt == Integer.class) score++;
+                }
+                cur = cur.getSuperclass();
+            }
+        } catch (Throwable ignored) {
+        }
+        return score;
     }
 
     private void logMissingCritical() {
