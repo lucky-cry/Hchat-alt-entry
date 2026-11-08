@@ -71,7 +71,17 @@ public class ModuleEntry implements IXposedHookLoadPackage {
     private FeatureContext featureContext;
 
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
+    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam param) throws Throwable {
+        bootstrap(new HostEnv(
+                null,
+                param.classLoader,
+                param.packageName,
+                param.processName,
+                param.appInfo));
+    }
+
+    /** legacy 与 libxposed 102 共用的初始化入口。 */
+    public void bootstrap(HostEnv lpparam) throws Throwable {
         // 1. 包名过滤
         if (!isWeChatPackage(lpparam.packageName)) return;
         if (!Process.is64Bit()) {
@@ -154,18 +164,18 @@ public class ModuleEntry implements IXposedHookLoadPackage {
      * 判断是否为主进程。
      * 微信主进程的 processName 等于 packageName。
      */
-    private boolean isMainProcess(XC_LoadPackage.LoadPackageParam lpparam) {
+    private boolean isMainProcess(HostEnv lpparam) {
         String process = lpparam.processName;
         return process == null || process.equals(lpparam.packageName);
     }
 
-    private boolean isAppBrandProcess(XC_LoadPackage.LoadPackageParam lpparam) {
+    private boolean isAppBrandProcess(HostEnv lpparam) {
         String process = lpparam.processName;
         String packageName = lpparam.packageName;
         return process != null && packageName != null && process.startsWith(packageName + ":appbrand");
     }
 
-    private void installAppBrandProcessHook(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void installAppBrandProcessHook(HostEnv lpparam) {
         try {
             HookRegistry.get().hookMethodByName(
                     "com.tencent.tinker.loader.app.TinkerApplication",
@@ -208,7 +218,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
 
     private void installAppBrandProcessHook(Context context,
                                             ClassLoader classLoader,
-                                            XC_LoadPackage.LoadPackageParam lpparam,
+                                            HostEnv lpparam,
                                             boolean applicationReady) {
         if (!TermsGate.INSTANCE.isAccepted(context)) return;
         boolean failed = false;
@@ -241,7 +251,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
 
     // ============ 模块初始化 ============
 
-    private void installHotUpdateEarlyHook(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void installHotUpdateEarlyHook(HostEnv lpparam) {
         try {
             HookRegistry.get().hookMethodByName(
                     "com.tencent.tinker.loader.app.TinkerApplication",
@@ -265,7 +275,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void installHotUpdateForAttach(XC_LoadPackage.LoadPackageParam lpparam,
+    private void installHotUpdateForAttach(HostEnv lpparam,
                                            HookParam param,
                                            String stage) {
         try {
@@ -299,7 +309,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void installTabletEarlyHook(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void installTabletEarlyHook(HostEnv lpparam) {
         try {
             HookRegistry.get().hookMethodByName(
                     "com.tencent.tinker.loader.app.TinkerApplication",
@@ -323,7 +333,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void installCustomBottomBarEarlyHook(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void installCustomBottomBarEarlyHook(HostEnv lpparam) {
         try {
             HookRegistry.get().hookMethodByName(
                     "com.tencent.tinker.loader.app.TinkerApplication",
@@ -356,7 +366,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void installTabletHookForAttach(XC_LoadPackage.LoadPackageParam lpparam,
+    private void installTabletHookForAttach(HostEnv lpparam,
                                             HookParam param,
                                             String stage) {
         try {
@@ -401,7 +411,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         }
     }
 
-    private void initModule(Context hostContext, XC_LoadPackage.LoadPackageParam lpparam) {
+    private void initModule(Context hostContext, HostEnv lpparam) {
         try {
             // 构建标记：日志里用它区分实机现在跑的是哪一版（排查「装了没生效」）。
             HLog.e(TAG + " 构建标记 build=" + h.Hchat.BuildConfig.VERSION_NAME
@@ -515,7 +525,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
     }
 
     private ClassLoader resolveHostClassLoader(Context hostContext,
-                                               XC_LoadPackage.LoadPackageParam lpparam) {
+                                               HostEnv lpparam) {
         ClassLoader lpClassLoader = lpparam.classLoader;
         ClassLoader contextClassLoader = null;
         ClassLoader threadClassLoader = null;
