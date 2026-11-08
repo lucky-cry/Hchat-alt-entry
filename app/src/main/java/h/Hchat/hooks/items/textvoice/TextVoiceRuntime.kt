@@ -9,7 +9,7 @@ import android.os.Looper
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
 import h.Hchat.hooks.core.FeatureContext
@@ -83,15 +83,15 @@ internal class TextVoiceRuntime(
     @Synchronized
     fun installMessageMenu(): Boolean {
         val createHooked = SingleMessageMenuLocator.menuCreateMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addPlayMenu(param)
                 }
             })
         }
         val clickHooked = SingleMessageMenuLocator.menuClickMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handlePlayClick(param)
                 }
             })
@@ -246,7 +246,7 @@ internal class TextVoiceRuntime(
         if (deleteFile) currentFile?.delete()
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -259,7 +259,7 @@ internal class TextVoiceRuntime(
         }
     }
 
-    private fun addPlayMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addPlayMenu(param: HookParam) {
         if (!playEnabled()) return
         val args = param.args ?: return
         val menu = args.getOrNull(0) ?: return
@@ -270,7 +270,7 @@ internal class TextVoiceRuntime(
         bindings[item] = payload
     }
 
-    private fun handlePlayClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handlePlayClick(param: HookParam) {
         if (!playEnabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != MENU_ITEM_ID) return

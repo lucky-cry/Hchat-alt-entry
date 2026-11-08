@@ -4,7 +4,7 @@ import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -80,15 +80,15 @@ private class AutoViewOriginalRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(onResume!!, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onResume!!, object : HookCallback {
+                override fun after(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     bindPageListener(activity)
                     scheduleCurrentPage(activity)
                 }
             })
-            HookRegistry.get().hook(onDestroy!!, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onDestroy!!, object : HookCallback {
+                override fun before(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     clearActivity(activity)
                 }
@@ -124,8 +124,8 @@ private class AutoViewOriginalRuntime(
         }
         if (!hookedPageListenerMethods.add(callback!!)) return
         runCatching {
-            HookRegistry.get().hook(callback, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(callback, object : HookCallback {
+                override fun after(param: HookParam) {
                     val owner = readFieldByType(param.thisObject, IMAGE_GALLERY_UI) as? Activity
                         ?: return
                     val position = (param.args.firstOrNull() as? Number)?.toInt() ?: return

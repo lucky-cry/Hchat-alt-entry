@@ -1,6 +1,6 @@
 package h.Hchat.hooks.items.zombiecheck
 
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -80,8 +80,8 @@ internal class ZombieCheckHooker(
             val callback = locateCallbackMethod(constructor) ?: return false
             locateDeleteMethod()
             WeChatApis.network()?.installNetworkHook(context.dexFinder())
-            HookRegistry.get().hook(callback, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(callback, object : HookCallback {
+                override fun before(param: HookParam) {
                     val args = param.args ?: return
                     if (args.size != 3) return
                     runtime.onProbeCallback(

@@ -2,7 +2,7 @@ package h.Hchat.hooks.items.textspeech
 
 import android.app.Activity
 import android.view.KeyEvent
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.BaseFeature
@@ -51,8 +51,8 @@ class TextSpeechFeature : BaseFeature() {
             return
         }
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val event = param.args.getOrNull(0) as? KeyEvent ?: return
                     if (runtime?.handleVolumeKey(event) == true) param.result = true
                 }

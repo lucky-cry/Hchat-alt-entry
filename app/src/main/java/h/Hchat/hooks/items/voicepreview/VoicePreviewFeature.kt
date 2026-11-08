@@ -6,7 +6,7 @@ import android.os.Looper
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
@@ -93,15 +93,15 @@ private class VoicePreviewRuntime(
     @Synchronized
     fun install(): Boolean {
         val createHooked = SingleMessageMenuLocator.menuCreateMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addPreviewMenu(param)
                 }
             })
         }
         val clickHooked = SingleMessageMenuLocator.menuClickMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handlePreviewClick(param)
                 }
             })
@@ -121,7 +121,7 @@ private class VoicePreviewRuntime(
         }
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -134,7 +134,7 @@ private class VoicePreviewRuntime(
         }
     }
 
-    private fun addPreviewMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addPreviewMenu(param: HookParam) {
         clearMenuMessageBinding()
         if (!enabled()) return
         val args = param.args ?: return
@@ -149,7 +149,7 @@ private class VoicePreviewRuntime(
         messagesByMenuGroup[item.groupId] = binding
     }
 
-    private fun handlePreviewClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handlePreviewClick(param: HookParam) {
         if (!enabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != MENU_ITEM_ID) return

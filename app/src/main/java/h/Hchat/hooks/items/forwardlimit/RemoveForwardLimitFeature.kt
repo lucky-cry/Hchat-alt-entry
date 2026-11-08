@@ -3,7 +3,7 @@ package h.Hchat.hooks.items.forwardlimit
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import de.robv.android.xposed.XC_MethodHook
+import de.robv.android.xposed.HookCallback
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
@@ -144,12 +144,12 @@ private class RemoveForwardLimitHooker(
     private fun hook(
         method: Method,
         label: String,
-        before: (XC_MethodHook.MethodHookParam) -> Unit
+        before: (HookParam) -> Unit
     ): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     before(param)
                 }
             })
