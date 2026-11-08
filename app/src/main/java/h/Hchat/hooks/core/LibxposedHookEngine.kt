@@ -21,7 +21,7 @@ class LibxposedHookEngine(private val xposed: XposedInterface) : HookEngine {
             if (param.hasResult) return@intercept param.result
 
             val result = try {
-                chain.proceed(param.consumeArgs())
+                chain.proceed(param.consumeArgs() ?: arrayOfNulls<Any?>(0))
             } catch (throwable: Throwable) {
                 param.result = null
                 param.setThrowable(throwable)
@@ -45,10 +45,12 @@ class LibxposedHookEngine(private val xposed: XposedInterface) : HookEngine {
 
         override val args: Array<Any?>? get() = argsArray
 
+        private var resultValue: Any? = null
+
         override var result: Any?
-            get() = field
+            get() = resultValue
             set(value) {
-                field = value
+                resultValue = value
                 hasResult = true
             }
 
