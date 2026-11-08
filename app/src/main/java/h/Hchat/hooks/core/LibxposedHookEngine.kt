@@ -41,6 +41,7 @@ class LibxposedHookEngine(private val xposed: XposedInterface) : HookEngine {
         var hasResult: Boolean = false
             private set
 
+        override val executable: java.lang.reflect.Member? get() = chain.executable
         override val thisObject: Any? get() = chain.thisObject
 
         override val args: Array<Any?>? get() = argsArray

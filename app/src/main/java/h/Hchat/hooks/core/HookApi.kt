@@ -14,6 +14,7 @@ import java.lang.reflect.Member
  * - 未来 `LibxposedHookEngine` 实现同一接口，功能层无需改动。
  */
 interface HookParam {
+    val executable: java.lang.reflect.Member?
     val thisObject: Any?
     val args: Array<Any?>?
     var result: Any?
@@ -47,6 +48,7 @@ class LegacyHookEngine : HookEngine {
     }
 
     private class LegacyHookParam(private val param: XC_MethodHook.MethodHookParam) : HookParam {
+        override val executable: java.lang.reflect.Member? get() = param.method
         override val thisObject: Any? get() = param.thisObject
         override val args: Array<Any?>? get() = param.args as? Array<Any?>
         override var result: Any?
