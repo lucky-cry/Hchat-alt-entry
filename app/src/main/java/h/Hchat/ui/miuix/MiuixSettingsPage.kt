@@ -9174,6 +9174,9 @@ internal fun FinderMediaDownloadMiuixPage(
                 bottom = padding.calculateBottomPadding() + 84.dp
             )
         ) {
+            val pathState = remember {
+                mutableStateOf(sp.getString(FinderMediaDownloadSettings.KEY_SAVE_PATH, "").orEmpty())
+            }
             item { SmallTitle(text = "视频号") }
             item {
                 SettingsCard {
@@ -9181,8 +9184,25 @@ internal fun FinderMediaDownloadMiuixPage(
                         sp,
                         FinderMediaDownloadSettings.KEY_ENABLE,
                         "视频号媒体下载",
-                        "在视频号分享菜单增加复制链接和下载入口，媒体保存到 Hchat/Finder",
+                        "在视频号分享菜单增加复制链接和下载入口",
                         FinderMediaDownloadSettings.DEFAULT_ENABLE
+                    )
+                }
+            }
+            item { SmallTitle(text = "保存位置") }
+            item {
+                SettingsCard {
+                    InputRow(
+                        title = "自定义目录",
+                        summary = "留空保存到私有路径 Android/media/<微信包名>/Hchat/Finder；" +
+                            "填写如 /storage/emulated/0/DCIM/Hchat 可保存到相册目录",
+                        value = pathState.value,
+                        onValueChange = { raw ->
+                            pathState.value = raw
+                            sp.edit()
+                                .putString(FinderMediaDownloadSettings.KEY_SAVE_PATH, raw.trim())
+                                .apply()
+                        }
                     )
                 }
             }

@@ -294,24 +294,26 @@ private class FinderMediaDownloadHooker(
                 return
             }
         }
+        val savePath = FinderMediaDownloadSettings.savePath(context.hostContext())
+        val locationText = savePath.ifBlank { "Hchat/Finder" }
         Thread({
             when (media.type) {
                 FinderMediaDownloadSupport.MEDIA_TYPE_IMAGE -> {
                     val files = FinderMediaDownloadSupport.downloadAllImages(
                         context.hostContext(),
                         media,
-                        null
+                        savePath.ifBlank { null }
                     )
-                    toast(if (files.isNotEmpty()) "已下载 ${files.size} 张图片到 Hchat/Finder" else "图片下载失败")
+                    toast(if (files.isNotEmpty()) "已下载 ${files.size} 张图片到 $locationText" else "图片下载失败")
                 }
                 FinderMediaDownloadSupport.MEDIA_TYPE_VIDEO -> {
                     val file = FinderMediaDownloadSupport.downloadItem(
                         context.hostContext(),
                         media,
                         0,
-                        null
+                        savePath.ifBlank { null }
                     )
-                    toast(if (file != null) "已下载视频到 Hchat/Finder" else "视频下载失败")
+                    toast(if (file != null) "已下载视频到 $locationText" else "视频下载失败")
                 }
             }
         }, threadName).start()
