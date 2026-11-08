@@ -33,15 +33,15 @@ class HookRegistry private constructor() {
         engine.hook(method, callback)
 
     /** 批量挂载：类及其父类中所有同名方法（替代 XposedBridge.hookAllMethods）。 */
-    fun hookAllMethods(clazz: Class<*>?, name: String, callback: HookCallback): List<Any?> {
+    fun hookAllMethods(clazz: Class<*>?, name: String, callback: HookCallback): List<Any> {
         if (clazz == null) return emptyList()
-        val handles = ArrayList<Any?>()
+        val handles = ArrayList<Any>()
         var current: Class<*>? = clazz
         while (current != null && current != Any::class.java) {
             for (method in current.declaredMethods) {
                 if (name.isNotEmpty() && method.name != name) continue
                 method.isAccessible = true
-                runCatching { handles.add(hookForMigration(method, callback)) }
+                runCatching { hookForMigration(method, callback) }.getOrNull()?.let { handles.add(it) }
             }
             current = current.superclass
         }
@@ -49,14 +49,14 @@ class HookRegistry private constructor() {
     }
 
     /** 批量挂载：类及其父类的全部构造器（替代 XposedBridge.hookAllConstructors）。 */
-    fun hookAllConstructors(clazz: Class<*>?, callback: HookCallback): List<Any?> {
+    fun hookAllConstructors(clazz: Class<*>?, callback: HookCallback): List<Any> {
         if (clazz == null) return emptyList()
-        val handles = ArrayList<Any?>()
+        val handles = ArrayList<Any>()
         var current: Class<*>? = clazz
         while (current != null && current != Any::class.java) {
             for (constructor in current.declaredConstructors) {
                 constructor.isAccessible = true
-                runCatching { handles.add(hookForMigration(constructor, callback)) }
+                runCatching { hookForMigration(constructor, callback) }.getOrNull()?.let { handles.add(it) }
             }
             current = current.superclass
         }
