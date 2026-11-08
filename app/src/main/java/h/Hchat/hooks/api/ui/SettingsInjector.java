@@ -78,7 +78,7 @@ public class SettingsInjector {
     private final SettingsEntrySettings entrySettings;
     private final File dexCacheDir;
     private final HashSet<Class<?>> plusMenuAdapterViewHookedClasses = new HashSet<>();
-    private XC_MethodHook.Unhook contextGetStringUnhook;
+    private HookCallback.Unhook contextGetStringUnhook;
     private volatile Class<?> modernLocationParentClass;
     private volatile Class<?> modernLocationFrontClass;
 
@@ -422,7 +422,7 @@ public class SettingsInjector {
             // 找到返回 SettingLocation 的方法
             for (Method m : KavaReflector.declaredMethods(childSettingItemClass)) {
                 if (m.getReturnType() == dex.settingLocationClass) {
-                    HookRegistry.get().hook(m, new XC_MethodHook(
+                    HookRegistry.get().hook(m, new HookCallback(
                             de.robv.android.xposed.callbacks.XCallback.PRIORITY_HIGHEST) {
                         @Override
                         public void after(HookParam param) {
@@ -746,7 +746,7 @@ public class SettingsInjector {
             Class<?> plusActionViewClass = KavaReflector.loadClass(
                     "com.tencent.mm.ui.HomeUI$PlusActionView", classLoader);
             if (plusActionViewClass == null) return false;
-            for (XC_MethodHook.Unhook unhook : XposedBridge.hookAllConstructors(
+            for (HookCallback.Unhook unhook : XposedBridge.hookAllConstructors(
                     plusActionViewClass,
                     new HookCallback() {
                         @Override

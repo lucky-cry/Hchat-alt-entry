@@ -334,19 +334,19 @@ public final class WeChatImageApi {
             return;
         }
         try {
-            XC_MethodHook captureConstructedManager = new HookCallback() {
+            HookCallback captureConstructedManager = new HookCallback() {
                 @Override
                 public void after(HookParam param) {
                     rememberMarsCdnManager(managerClass, param != null ? param.getThisObject() : null);
                 }
             };
-            Set<XC_MethodHook.Unhook> unhooks = XposedBridge.hookAllConstructors(
+            Set<HookCallback.Unhook> unhooks = XposedBridge.hookAllConstructors(
                     managerClass,
                     captureConstructedManager);
-            for (XC_MethodHook.Unhook unhook : unhooks) {
+            for (HookCallback.Unhook unhook : unhooks) {
                 HookRegistry.get().add(unhook);
             }
-            Set<XC_MethodHook.Unhook> startUnhooks = XposedBridge.hookAllMethods(
+            Set<HookCallback.Unhook> startUnhooks = XposedBridge.hookAllMethods(
                     managerClass,
                     "startC2CDownload",
                     new HookCallback() {
@@ -357,7 +357,7 @@ public final class WeChatImageApi {
                                     param != null ? param.getThisObject() : null);
                         }
                     });
-            for (XC_MethodHook.Unhook unhook : startUnhooks) {
+            for (HookCallback.Unhook unhook : startUnhooks) {
                 HookRegistry.get().add(unhook);
             }
             resolveMarsCdnManager(managerClass);

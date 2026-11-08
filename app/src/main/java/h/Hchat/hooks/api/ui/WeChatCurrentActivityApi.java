@@ -46,7 +46,7 @@ public final class WeChatCurrentActivityApi {
                     }
                 }
             });
-            XC_MethodHook clearHook = new HookCallback() {
+            HookCallback clearHook = new HookCallback() {
                 @Override
                 public void after(HookParam param) {
                     Activity current = currentActivity();
