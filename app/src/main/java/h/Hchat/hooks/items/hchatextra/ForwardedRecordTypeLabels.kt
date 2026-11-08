@@ -107,7 +107,7 @@ internal class ForwardedRecordTypeLabels(
     @Synchronized
     fun destroy() {
         destroyed = true
-        HookRegistry.get().unhook(unhook)
+        HookRegistry.get().unhookHandle(unhook)
         unhook = null
         main.post {
             rows.values.forEach { state ->
