@@ -202,7 +202,9 @@ private class CallRingtoneBlockHooker(
                         method.returnType == Void.TYPE
                 }
                 logger("铃声兜底: 类 ${cl.name} 方向=${direction.size} 路由=$hasRoute", null)
-                if (direction.size == 1 && hasRoute) result.add(direction.first())
+                // 实测 8.0.80 该类有 5 个 (Z)->V 方法，无法只靠数量区分，
+                // 只要有路由方法就全部纳入，由 hook 内部的 outgoing 判断决定是否拦截。
+                if (hasRoute && direction.isNotEmpty()) result.addAll(direction)
             }
             if (result.isNotEmpty()) break
         }
