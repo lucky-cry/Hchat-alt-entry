@@ -6,8 +6,8 @@ import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.XposedHelpers
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
@@ -45,7 +45,7 @@ class ScriptPluginBridge internal constructor(
     val dexKit: ScriptDexKitBridge? = null
 ) {
     val apis: Class<WeChatApis> = WeChatApis::class.java
-    private val pluginHooks = ConcurrentHashMap<String, CopyOnWriteArrayList<XC_MethodHook.Unhook>>()
+    private val pluginHooks = ConcurrentHashMap<String, CopyOnWriteArrayList<Any>>()
     private val pluginFloatingBars = ConcurrentHashMap<String, CopyOnWriteArrayList<ScriptFloatingGlassBarHandle>>()
     private val pluginDialogCallbacks = ConcurrentHashMap<String, MutableSet<DialogCallbackGate<*>>>()
     private val configLock = Any()
@@ -68,12 +68,12 @@ class ScriptPluginBridge internal constructor(
     }
 
     fun log(message: Any?) {
-        XposedBridge.log("[Hchat:Script] ${message ?: "null"}")
+        h.Hchat.utils.HLog.e("[Hchat:Script] ${message ?: "null"}")
     }
 
     fun log(pluginName: String?, pluginDir: File?, message: Any?) {
         val text = message?.toString() ?: "null"
-        XposedBridge.log("[Hchat:Script] [${pluginName.orEmpty()}] $text")
+        h.Hchat.utils.HLog.e("[Hchat:Script] [${pluginName.orEmpty()}] $text")
         val dir = pluginDir ?: return
         runCatching {
             if (!dir.isDirectory) dir.mkdirs()
@@ -523,16 +523,16 @@ class ScriptPluginBridge internal constructor(
 
     fun hookBefore(
         member: Member,
-        callback: Consumer<XC_MethodHook.MethodHookParam>
-    ): XC_MethodHook.Unhook = hookBefore(null, member, callback)
+        callback: Consumer<HookParam>
+    ): Any = hookBefore(null, member, callback)
 
     fun hookBefore(
         pluginId: String?,
         member: Member,
-        callback: Consumer<XC_MethodHook.MethodHookParam>
-    ): XC_MethodHook.Unhook {
-        val unhook = HookRegistry.get().hook(member, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        callback: Consumer<HookParam>
+    ): Any {
+        val unhook = HookRegistry.get().hook(member, object : HookCallback {
+            override fun before(param: HookParam) {
                 callback.accept(param)
             }
         })
@@ -542,16 +542,16 @@ class ScriptPluginBridge internal constructor(
 
     fun hookAfter(
         member: Member,
-        callback: Consumer<XC_MethodHook.MethodHookParam>
-    ): XC_MethodHook.Unhook = hookAfter(null, member, callback)
+        callback: Consumer<HookParam>
+    ): Any = hookAfter(null, member, callback)
 
     fun hookAfter(
         pluginId: String?,
         member: Member,
-        callback: Consumer<XC_MethodHook.MethodHookParam>
-    ): XC_MethodHook.Unhook {
-        val unhook = HookRegistry.get().hook(member, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        callback: Consumer<HookParam>
+    ): Any {
+        val unhook = HookRegistry.get().hook(member, object : HookCallback {
+            override fun after(param: HookParam) {
                 callback.accept(param)
             }
         })
@@ -561,16 +561,16 @@ class ScriptPluginBridge internal constructor(
 
     fun hookReplace(
         member: Member,
-        callback: Function<XC_MethodHook.MethodHookParam, Any?>
-    ): XC_MethodHook.Unhook = hookReplace(null, member, callback)
+        callback: Function<HookParam, Any?>
+    ): Any = hookReplace(null, member, callback)
 
     fun hookReplace(
         pluginId: String?,
         member: Member,
-        callback: Function<XC_MethodHook.MethodHookParam, Any?>
-    ): XC_MethodHook.Unhook {
-        val unhook = HookRegistry.get().hook(member, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        callback: Function<HookParam, Any?>
+    ): Any {
+        val unhook = HookRegistry.get().hook(member, object : HookCallback {
+            override fun before(param: HookParam) {
                 param.result = callback.apply(param)
             }
         })
@@ -578,14 +578,14 @@ class ScriptPluginBridge internal constructor(
         return unhook
     }
 
-    fun unhook(unhook: XC_MethodHook.Unhook?) {
-        HookRegistry.get().unhook(unhook)
+    fun unhook(unhook: Any?) {
+        HookRegistry.get().unhookHandle(unhook)
         if (unhook != null) {
             pluginHooks.values.forEach { it.remove(unhook) }
         }
     }
 
-    fun unhook(pluginId: String?, unhook: XC_MethodHook.Unhook?) {
+    fun unhook(pluginId: String?, unhook: Any?) {
         if (pluginId != null && unhook != null) {
             pluginHooks[pluginId]?.remove(unhook)
         }
@@ -593,7 +593,7 @@ class ScriptPluginBridge internal constructor(
     }
 
     fun unhook(pluginId: String?, handle: Any?) {
-        unhook(pluginId, handle as? XC_MethodHook.Unhook)
+        unhook(pluginId, handle as? Any)
     }
 
     fun unhookPlugin(pluginId: String?) {
@@ -615,13 +615,13 @@ class ScriptPluginBridge internal constructor(
             }
         }
         for (hook in pluginHooks.remove(pluginId).orEmpty()) {
-            runCatching { HookRegistry.get().unhook(hook) }.onFailure {
+            runCatching { HookRegistry.get().unhookHandle(hook) }.onFailure {
                 h.Hchat.utils.HLog.e("[Hchat:Script] 解除插件 Hook 失败: $pluginId", it)
             }
         }
     }
 
-    private fun rememberHook(pluginId: String?, unhook: XC_MethodHook.Unhook?) {
+    private fun rememberHook(pluginId: String?, unhook: Any?) {
         if (pluginId.isNullOrBlank() || unhook == null) return
         pluginHooks.getOrPut(pluginId) { CopyOnWriteArrayList() }.add(unhook)
     }

@@ -12,7 +12,8 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.SettingsDexFinder
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
@@ -238,8 +239,8 @@ object ScriptMenuDispatcher {
     private fun installPlusMenuHooks(finder: SettingsDexFinder): Boolean {
         val helperClass = finder.plusSubMenuHelperClass ?: return false
         val adapterInstalled = finder.plusSubMenuAdapterMethod?.let { method ->
-            hookOnce(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hookOnce(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     runCatching {
                         appendPlusMenuItems(param.thisObject, param.result as? BaseAdapter)
                     }.onFailure { logError("脚本加号菜单添加失败", it) }
@@ -247,22 +248,22 @@ object ScriptMenuDispatcher {
             })
         } ?: false
         val clickInstalled = finder.plusSubMenuOnItemClickMethod?.let { method ->
-            hookOnce(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hookOnce(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handlePlusMenuClick(param)
                 }
             })
         } ?: false
         findPlusMenuPopulateMethods(helperClass).forEach { method ->
-            hookOnce(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hookOnce(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     appendPlusMenuItems(param.thisObject, null)
                 }
             })
         }
         findPlusMenuShowMethods(helperClass).forEach { method ->
-            hookOnce(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hookOnce(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     appendPlusMenuItems(param.thisObject, null)
                 }
             })
@@ -277,15 +278,15 @@ object ScriptMenuDispatcher {
         var createHooked = false
         var clickHooked = false
         SingleMessageMenuLocator.menuCreateMethods(context, log).forEach { method ->
-            createHooked = hookOnce(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            createHooked = hookOnce(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addMessageMenus(param)
                 }
             }) || createHooked
         }
         SingleMessageMenuLocator.menuClickMethods(context, log).forEach { method ->
-            clickHooked = hookOnce(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            clickHooked = hookOnce(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleMessageMenuClick(param)
                 }
             }) || clickHooked
@@ -293,7 +294,7 @@ object ScriptMenuDispatcher {
         return createHooked && clickHooked
     }
 
-    private fun hookOnce(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hookOnce(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -379,7 +380,7 @@ object ScriptMenuDispatcher {
         }
     }
 
-    private fun handlePlusMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handlePlusMenuClick(param: HookParam) {
         val position = (param.args?.getOrNull(2) as? Number)?.toInt() ?: return
         val helper = param.thisObject
         val itemId = readPlusMenuItemId(helper, position)
@@ -395,7 +396,7 @@ object ScriptMenuDispatcher {
             .onFailure { logError("脚本加号菜单回调失败: ${entry.title}", it) }
     }
 
-    private fun addMessageMenus(param: XC_MethodHook.MethodHookParam) {
+    private fun addMessageMenus(param: HookParam) {
         clearMessageBindings()
         val active = messageEntries.values.sortedWith(
             compareBy<MessageEntry> { if (it.front) 0 else 1 }
@@ -416,7 +417,7 @@ object ScriptMenuDispatcher {
         moveMessageItemsToFront(menu, frontItems)
     }
 
-    private fun handleMessageMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleMessageMenuClick(param: HookParam) {
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         val entry = messageEntries.values.firstOrNull { it.itemId == item.itemId } ?: return
         param.result = null
@@ -487,8 +488,8 @@ object ScriptMenuDispatcher {
         val clazz = adapter.javaClass
         if (plusAdapterViewHookedClasses.contains(clazz)) return
         val method = findAdapterGetViewMethod(clazz) ?: return
-        val hooked = hookOnce(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val hooked = hookOnce(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 val result = param.result as? View ?: return
                 val position = (param.args?.getOrNull(0) as? Number)?.toInt() ?: return
                 val helper = findPlusMenuHelperFieldValue(param.thisObject) ?: return

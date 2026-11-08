@@ -2,7 +2,8 @@ package h.Hchat.hooks.items.script.agent
 
 import android.content.Context
 import android.content.res.Resources
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.XposedHelpers
 import h.Hchat.utils.HLog
 
@@ -38,8 +39,8 @@ object ModuleResourceMenuFallback {
                 "dispatchMenuItemSelected",
                 menuBuilderClass,
                 android.view.MenuItem::class.java,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                object : HookCallback {
+                    override fun before(param: HookParam) {
                         val item = param.args?.getOrNull(1) as? android.view.MenuItem ?: return
                         val menu = param.args?.getOrNull(0) ?: param.thisObject
                         if (!isSelectionMenu(menu) && !isSelectionMenu(param.thisObject)) return
@@ -97,8 +98,8 @@ object ModuleResourceMenuFallback {
                 INT,
                 INT,
                 INT,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                object : HookCallback {
+                    override fun before(param: HookParam) {
                         val args = param.args ?: return
                         if (args.size < 4) return
                         val resId = args[3] as? Int ?: return

@@ -12,7 +12,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.OutgoingTextDecoratorRegistry
 import h.Hchat.hooks.core.FeatureContext
@@ -92,8 +93,8 @@ object ScriptSendButtonHook {
                 return false
             }
             if (!clickHookInstalled) {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         val footer = findChatFooter(param.thisObject) ?: return
                         lastChatFooter = WeakReference(footer)
                         rememberActivityFromFooter(footer)
@@ -144,7 +145,7 @@ object ScriptSendButtonHook {
                         param.result = null
                     }
 
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                    override fun after(param: HookParam) {
                         val decoration = param.getObjectExtra(TEXT_DECORATION_EXTRA)
                             as? AppliedTextDecoration
                         if (decoration != null) {
@@ -188,8 +189,8 @@ object ScriptSendButtonHook {
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(attachMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(attachMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     trackInputView(findInputView(param.thisObject))
                 }
             })
@@ -215,8 +216,8 @@ object ScriptSendButtonHook {
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (dispatchingSyntheticCancel.get() == true) return
                     runCatching {
                         handleLongPressTouch(param, sendClickListenerClass)
@@ -225,7 +226,7 @@ object ScriptSendButtonHook {
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     val event = param.args?.getOrNull(0) as? MotionEvent ?: return
                     if (event.actionMasked == MotionEvent.ACTION_DOWN && param.result != true) {
@@ -244,7 +245,7 @@ object ScriptSendButtonHook {
     }
 
     private fun handleLongPressTouch(
-        param: XC_MethodHook.MethodHookParam,
+        param: HookParam,
         sendClickListenerClass: Class<*>
     ) {
         val view = param.thisObject as? View ?: return
