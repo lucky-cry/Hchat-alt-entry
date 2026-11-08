@@ -6204,6 +6204,16 @@ public class DexFinder {
                 return true;
             }
         }
+        // 8.0.80 起该监听把 ChatFooter 存成其它类型（实测字段类型 eb6/a），
+        // 但构造参数仍是 ChatFooter，用构造签名兜底。
+        for (java.lang.reflect.Constructor<?> ctor : KavaReflector.declaredConstructors(owner)) {
+            for (Class<?> param : ctor.getParameterTypes()) {
+                if (param != null
+                        && "com.tencent.mm.pluginsdk.ui.chat.ChatFooter".equals(param.getName())) {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
