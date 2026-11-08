@@ -99,11 +99,6 @@ kotlin {
 dependencies {
     // 迁移目标：libxposed API 102（与参考项目 BetterHeybox 一致）
     compileOnly("io.github.libxposed:api:102.0.0")
-    // service 会传递依赖 api，必须排除：api 只能由框架在运行时提供，
-    // 打进 APK 会导致模块的 XposedModule 与框架的不是同一个类。
-    implementation("io.github.libxposed:service:102.0.0") {
-        exclude(group = "io.github.libxposed", module = "api")
-    }
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     implementation("io.github.billywei01:fastkv:3.0.1")

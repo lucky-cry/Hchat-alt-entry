@@ -24,6 +24,7 @@ class HchatModule : XposedModule() {
     }
 
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
+        super.onModuleLoaded(param)
         Log.i(TAG, "onModuleLoaded")
         try {
             HookRegistry.get().setEngine(LibxposedHookEngine(this))
@@ -41,10 +42,12 @@ class HchatModule : XposedModule() {
     }
 
     override fun onPackageLoaded(param: XposedModuleInterface.PackageLoadedParam) {
+        super.onPackageLoaded(param)
         Log.i(TAG, "onPackageLoaded: " + runCatching { param.packageName }.getOrDefault("?"))
     }
 
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
+        super.onPackageReady(param)
         val pkg = runCatching { param.packageName }.getOrDefault("")
         Log.i(TAG, "onPackageReady: $pkg")
         if (!pkg.startsWith(WECHAT_PKG)) return
