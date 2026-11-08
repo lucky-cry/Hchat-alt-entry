@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.antirecall
 
 import android.content.ContentValues
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.XposedBridge
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
@@ -68,8 +69,8 @@ class AntiRecallFeature : BaseFeature() {
             var installed = false
             revokeEntries.map { it.method }.forEach { method ->
                 try {
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             val args = param.args ?: return
                             val talker = args.getOrNull(0) as? String ?: ""
                             val svrId = (args.getOrNull(1) as? Number)?.toLong() ?: 0L
@@ -213,8 +214,8 @@ class AntiRecallFeature : BaseFeature() {
         var installed = false
         methods.forEach { method ->
             try {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                         val msgId = (param.args?.getOrNull(0) as? Number)?.toLong() ?: return
                         val msg = param.args?.getOrNull(1) ?: return
@@ -243,8 +244,8 @@ class AntiRecallFeature : BaseFeature() {
         var installed = false
         methods.forEach { method ->
             try {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                         if (!shouldBlockMsgProcessingClear(param.args)) return
                         param.setResult(null)
@@ -264,8 +265,8 @@ class AntiRecallFeature : BaseFeature() {
         var installed = false
         methods.forEach { method ->
             try {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                         if (!shouldBlockLegacySelfRecallMediaCleanup(param.args)) return
                         param.setResult(null)
@@ -422,8 +423,8 @@ class AntiRecallFeature : BaseFeature() {
         var count = 0
         for (method in KavaReflector.declaredMethods(dbClass)) {
             if (!isUpdateMethod(method)) continue
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!isAntiRecallEnabled(context) || !keepSelfRecallEnabled(context)) return
                     if (!fixSelfRecallUpdateValues(param.args)) return
                 }

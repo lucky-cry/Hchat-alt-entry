@@ -7,7 +7,8 @@ import android.os.Looper
 import android.text.TextUtils
 import android.view.View
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
@@ -103,8 +104,8 @@ private class InputHintRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(attachMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(attachMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     bindFooter(param.thisObject)
                 }
             })

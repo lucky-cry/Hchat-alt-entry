@@ -11,7 +11,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -56,8 +57,8 @@ private class QuickMarkReadDragController(
         if (installed) return true
         val methods = collectDispatchMethods()
         if (methods.isEmpty()) return false
-        val callback = object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val callback = object : HookCallback {
+            override fun before(param: HookParam) {
                 val activity = param.thisObject as? Activity ?: return
                 val event = param.args?.getOrNull(0) as? MotionEvent ?: return
                 if (handleTouch(activity, event)) {
