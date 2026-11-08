@@ -7,7 +7,8 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -76,21 +77,21 @@ internal object SnsContextMenuDispatcher {
         this.resolver = resolver
         this.logger = logger
         val createHooked = SnsContextMenuLocator.menuCreateMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
+            hook(method, object : HookCallback() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     addMenus(param)
                 }
             })
         }
         val clickHooked = SnsContextMenuLocator.menuClickMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
+            hook(method, object : HookCallback() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     handleClick(param)
                 }
             })
         }
         val foldHooked = SnsContextMenuLocator.foldBindCompletionMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
+            hook(method, object : HookCallback() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     bindFoldLongClick(param)
                 }
@@ -115,7 +116,7 @@ internal object SnsContextMenuDispatcher {
         }
     }
 
-    private fun addMenus(param: XC_MethodHook.MethodHookParam) {
+    private fun addMenus(param: HookParam) {
         val target = resolveTarget(param) ?: return
         val active = activeEntries(target)
         if (active.isEmpty()) return
@@ -130,7 +131,7 @@ internal object SnsContextMenuDispatcher {
         }
     }
 
-    private fun bindFoldLongClick(param: XC_MethodHook.MethodHookParam) {
+    private fun bindFoldLongClick(param: HookParam) {
         val owner = param.thisObject ?: return
         val fields = KavaReflector.declaredFields(owner.javaClass)
             .filterNot { Modifier.isStatic(it.modifiers) }
@@ -307,7 +308,7 @@ internal object SnsContextMenuDispatcher {
     }
 
     @Synchronized
-    private fun handleClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleClick(param: HookParam) {
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         val entry = entries.values.firstOrNull { it.itemId == item.itemId } ?: return
         if (!runCatching(entry.isEnabled).getOrDefault(false)) return
@@ -329,7 +330,7 @@ internal object SnsContextMenuDispatcher {
         }
     }
 
-    private fun resolveTarget(param: XC_MethodHook.MethodHookParam): SnsContextMenuTarget? {
+    private fun resolveTarget(param: HookParam): SnsContextMenuTarget? {
         val currentResolver = resolver ?: return null
         val snapshot = currentResolver.resolve(param.thisObject, param.args) ?: return null
         var nativeInfo = currentResolver.resolveNativeSnsInfo(param.thisObject, param.args)

@@ -27,7 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 import de.robv.android.xposed.XposedBridge;
 
 /**
@@ -333,10 +334,10 @@ public final class WeChatImageApi {
             return;
         }
         try {
-            XC_MethodHook captureConstructedManager = new XC_MethodHook() {
+            XC_MethodHook captureConstructedManager = new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    rememberMarsCdnManager(managerClass, param != null ? param.thisObject : null);
+                public void after(HookParam param) {
+                    rememberMarsCdnManager(managerClass, param != null ? param.getThisObject() : null);
                 }
             };
             Set<XC_MethodHook.Unhook> unhooks = XposedBridge.hookAllConstructors(
@@ -348,12 +349,12 @@ public final class WeChatImageApi {
             Set<XC_MethodHook.Unhook> startUnhooks = XposedBridge.hookAllMethods(
                     managerClass,
                     "startC2CDownload",
-                    new XC_MethodHook() {
+                    new HookCallback() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
+                        public void before(HookParam param) {
                             rememberMarsCdnManager(
                                     managerClass,
-                                    param != null ? param.thisObject : null);
+                                    param != null ? param.getThisObject() : null);
                         }
                     });
             for (XC_MethodHook.Unhook unhook : startUnhooks) {

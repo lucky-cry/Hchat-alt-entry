@@ -11,6 +11,7 @@ import java.util.concurrent.CancellationException
 class HookRegistry private constructor() {
     private val lock = Any()
     private val unhooks = ArrayList<XC_MethodHook.Unhook>()
+    private val extraHandles = ArrayList<Any>()
     private val installationLease = ThreadLocal<Long>()
     @Volatile private var generation = 0L
 
@@ -79,6 +80,19 @@ class HookRegistry private constructor() {
         finally {
             if (previous == null) installationLease.remove() else installationLease.set(previous)
         }
+    }
+
+    /** 迁移期重载：调用点无需改动，回调类型换成 HookCallback 即可。 */
+    fun hook(method: Member, callback: HookCallback): Any? = hookForMigration(method, callback)
+
+    /** 迁移期重载：接受引擎返回的任意句柄（HookHandle 或 Unhook）。 */
+    fun add(handle: Any?) {
+        if (handle == null) return
+        if (handle is XC_MethodHook.Unhook) {
+            add(handle)
+            return
+        }
+        synchronized(lock) { extraHandles.add(handle) }
     }
 
     fun hook(method: Member, callback: XC_MethodHook): XC_MethodHook.Unhook = synchronized(lock) {

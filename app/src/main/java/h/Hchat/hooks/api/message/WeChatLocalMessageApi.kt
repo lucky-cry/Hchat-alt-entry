@@ -1,7 +1,8 @@
 package h.Hchat.hooks.api.message
 
 import android.text.TextUtils
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexFinder
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.hooks.api.media.WeChatInternalServices
@@ -49,7 +50,7 @@ class WeChatLocalMessageApi(
         val method = finder.localMessageCreateTimeMethod ?: return false
         synchronized(this) {
             if (createTimeHookInstalled) return true
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
+            HookRegistry.get().hook(method, object : HookCallback() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     val pending = pendingCreateTime.get() ?: return
                     val args = param.args ?: return

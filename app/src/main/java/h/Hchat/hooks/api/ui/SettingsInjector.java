@@ -28,7 +28,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -164,10 +165,10 @@ public class SettingsInjector {
         try {
             // Hook SettingsUI.initView()
             HookRegistry.get().add(XposedHelpers.findAndHookMethod(dex.settingsUIClass, "initView",
-                    new XC_MethodHook() {
+                    new HookCallback() {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            Activity activity = (Activity) param.thisObject;
+                        public void after(HookParam param) {
+                            Activity activity = (Activity) param.getThisObject();
                             try {
                                 Constructor<?> ctor = KavaReflector.findConstructor(
                                         dex.iconPreferenceClass, Context.class);
@@ -198,18 +199,18 @@ public class SettingsInjector {
             }
             if (targetTreeClick != null) {
                 final Method finalTarget = targetTreeClick;
-                HookRegistry.get().hook(finalTarget, new XC_MethodHook() {
+                HookRegistry.get().hook(finalTarget, new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
+                    public void before(HookParam param) {
                         try {
                             // WeKit: if (args.size < 2) return; val preference = args[1]
-                            if (param.args.length < 2) return;
-                            Object preference = param.args[1];
+                            if (param.getArgs().length < 2) return;
+                            Object preference = param.getArgs()[1];
                             if (preference == null) return;
 
                             String key = (String) KavaReflector.invoke(dex.methodGetKey, preference);
                             if (PREFS_KEY.equals(key)) {
-                                Activity activity = (Activity) param.thisObject;
+                                Activity activity = (Activity) param.getThisObject();
                                 showModuleSettingsPage(activity);
                                 param.setResult(true);
                             }
@@ -406,10 +407,10 @@ public class SettingsInjector {
             // hook proxy class 构造函数，确保 handler 被设置
             Constructor<?> proxyConstructor = KavaReflector.findConstructor(proxyClass, activityClass);
             final Constructor<?> finalProxyConstructor = proxyConstructor;
-            HookRegistry.get().hook(proxyConstructor, new XC_MethodHook() {
+            HookRegistry.get().hook(proxyConstructor, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    ProxyBuilder.setInvocationHandler(param.thisObject, handler);
+                public void after(HookParam param) {
+                    ProxyBuilder.setInvocationHandler(param.getThisObject(), handler);
                 }
             });
 
@@ -424,7 +425,7 @@ public class SettingsInjector {
                     HookRegistry.get().hook(m, new XC_MethodHook(
                             de.robv.android.xposed.callbacks.XCallback.PRIORITY_HIGHEST) {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+                        public void after(HookParam param) {
                             try {
                                 Object oldLocation = param.getResult();
                                 Class<?> parentClass = readSettingLocationClass(oldLocation, 0, groupSettingItemClass);
@@ -454,9 +455,9 @@ public class SettingsInjector {
             if (providerMethod == null) {
                 logDetail("[Modern] ClassesProvider 方法未找到，跳过 Provider 注入");
             } else {
-                HookRegistry.get().hook(providerMethod, new XC_MethodHook() {
+                HookRegistry.get().hook(providerMethod, new HookCallback() {
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
+                    public void after(HookParam param) {
                         try {
                             Map<?, ?> map = (Map<?, ?>) param.getResult();
                             if (map == null) return;
@@ -465,7 +466,7 @@ public class SettingsInjector {
                             patched.putAll((Map<?, ?>) map);
 
                             if (hasBaseSettingItemValue(map)) {
-                                Object activity = param.args != null && param.args.length > 0 ? param.args[0] : null;
+                                Object activity = param.getArgs() != null && param.getArgs().length > 0 ? param.getArgs()[0] : null;
                                 if (activity == null) return;
                                 Object item = KavaReflector.newInstance(finalProxyConstructor, activity);
                                 ProxyBuilder.setInvocationHandler(item, handler);
@@ -571,18 +572,18 @@ public class SettingsInjector {
             return;
         }
 
-        HookRegistry.get().hook(superImportMethod, new XC_MethodHook() {
+        HookRegistry.get().hook(superImportMethod, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
+            public void after(HookParam param) {
                 try {
                     if (mainOnly
                             && dex.mainSettingsUIClass != null
-                            && !dex.mainSettingsUIClass.isInstance(param.thisObject)) {
+                            && !dex.mainSettingsUIClass.isInstance(param.getThisObject())) {
                         return;
                     }
 
                     @SuppressWarnings("unchecked")
-                    HashSet<Class<?>> itemClasses = (HashSet<Class<?>>) param.args[0];
+                    HashSet<Class<?>> itemClasses = (HashSet<Class<?>>) param.getArgs()[0];
                     itemClasses.add(proxyClass);
 
                     logDetail("[Modern] superImportUIComponents 注入完成: "
@@ -601,10 +602,10 @@ public class SettingsInjector {
         if (contextGetStringUnhook != null) return;
         contextGetStringUnhook = XposedHelpers.findAndHookMethod(
                 Context.class, "getString", int.class,
-                new XC_MethodHook() {
+                new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if ((int) param.args[0] == HCHAT_SETTING_ITEM_NAME_RES_ID) {
+                    public void before(HookParam param) {
+                        if ((int) param.getArgs()[0] == HCHAT_SETTING_ITEM_NAME_RES_ID) {
                             param.setResult(PREFS_TITLE);
                         }
                     }
@@ -688,11 +689,11 @@ public class SettingsInjector {
             // Hook onCreate
             HookRegistry.get().add(XposedHelpers.findAndHookMethod(launcherClass, "onCreate",
                     android.os.Bundle.class,
-                    new XC_MethodHook() {
+                    new HookCallback() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
+                        public void before(HookParam param) {
                             try {
-                                Activity activity = (Activity) param.thisObject;
+                                Activity activity = (Activity) param.getThisObject();
                                 Intent intent = activity.getIntent();
                                 if (intent != null && intent.hasExtra(MODULE_TAG)) {
                                     new Handler(Looper.getMainLooper()).postDelayed(
@@ -705,12 +706,12 @@ public class SettingsInjector {
             // Hook onNewIntent
             HookRegistry.get().add(XposedHelpers.findAndHookMethod(launcherClass, "onNewIntent",
                     Intent.class,
-                    new XC_MethodHook() {
+                    new HookCallback() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
+                        public void before(HookParam param) {
                             try {
-                                Activity activity = (Activity) param.thisObject;
-                                Intent intent = (Intent) param.args[0];
+                                Activity activity = (Activity) param.getThisObject();
+                                Intent intent = (Intent) param.getArgs()[0];
                                 if (intent != null && intent.hasExtra(MODULE_TAG)) {
                                     showModuleSettingsPage(activity);
                                 }
@@ -747,11 +748,11 @@ public class SettingsInjector {
             if (plusActionViewClass == null) return false;
             for (XC_MethodHook.Unhook unhook : XposedBridge.hookAllConstructors(
                     plusActionViewClass,
-                    new XC_MethodHook() {
+                    new HookCallback() {
                         @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
+                        public void after(HookParam param) {
                             try {
-                                markPlusView(resolvePlusActionRealView(param.thisObject));
+                                markPlusView(resolvePlusActionRealView(param.getThisObject()));
                             } catch (Throwable e) {
                                 h.Hchat.utils.HLog.e(TAG + " [PlusLongPress] 绑定加号入口失败: " + e.getMessage(), e);
                             }
@@ -832,39 +833,39 @@ public class SettingsInjector {
         }
 
         try {
-            HookRegistry.get().hook(dex.plusSubMenuAdapterMethod, new XC_MethodHook() {
+            HookRegistry.get().hook(dex.plusSubMenuAdapterMethod, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookParam param) {
                     try {
                         BaseAdapter adapter = param.getResult() instanceof BaseAdapter
                                 ? (BaseAdapter) param.getResult()
                                 : null;
-                        appendEnabledPlusMenuItems(param.thisObject, adapter);
+                        appendEnabledPlusMenuItems(param.getThisObject(), adapter);
                     } catch (Throwable e) {
                         h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 添加入口失败: " + e.getMessage(), e);
                     }
                 }
             });
 
-            HookRegistry.get().hook(dex.plusSubMenuOnItemClickMethod, new XC_MethodHook() {
+            HookRegistry.get().hook(dex.plusSubMenuOnItemClickMethod, new HookCallback() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
+                public void before(HookParam param) {
                     try {
-                        if (param.args == null || param.args.length < 3) return;
-                        int position = (int) param.args[2];
-                        int itemId = readPlusMenuItemId(param.thisObject, position);
+                        if (param.getArgs() == null || param.getArgs().length < 3) return;
+                        int position = (int) param.getArgs()[2];
+                        int itemId = readPlusMenuItemId(param.getThisObject(), position);
                         if (itemId == Integer.MIN_VALUE) {
                             return;
                         }
 
                         param.setResult(null);
-                        dismissPlusMenu(param.thisObject);
+                        dismissPlusMenu(param.getThisObject());
                         if (itemId == QUICK_TERMINATE_PLUS_MENU_ID) {
                             QuickTerminateRuntime.terminateCurrentProcess();
                             return;
                         }
 
-                        Context context = findContextFieldValue(param.thisObject);
+                        Context context = findContextFieldValue(param.getThisObject());
                         if (context == null) return;
                         if (itemId == HCHAT_PLUS_MENU_ID) {
                             showModuleSettingsPage(context);
@@ -1205,15 +1206,15 @@ public class SettingsInjector {
             if (plusMenuAdapterViewHookedClasses.contains(adapterClass)) return;
             Method getViewMethod = findAdapterGetViewMethod(adapterClass);
             if (getViewMethod == null) return;
-            HookRegistry.get().hook(getViewMethod, new XC_MethodHook() {
+            HookRegistry.get().hook(getViewMethod, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookParam param) {
                     try {
-                        if (param.args == null || param.args.length < 1) return;
+                        if (param.getArgs() == null || param.getArgs().length < 1) return;
                         Object result = param.getResult();
                         if (!(result instanceof View)) return;
-                        int position = (int) param.args[0];
-                        Object helper = findPlusMenuHelperFieldValue(param.thisObject);
+                        int position = (int) param.getArgs()[0];
+                        Object helper = findPlusMenuHelperFieldValue(param.getThisObject());
                         int itemId = readPlusMenuItemId(helper, position);
                         if (itemId == Integer.MIN_VALUE) return;
                         applyPlusMenuIcon((View) result, itemId);
@@ -1284,20 +1285,20 @@ public class SettingsInjector {
         HashSet<Method> methods = new HashSet<>();
         for (Method populateMethod : findPlusMenuPopulateMethods(helperClass)) {
             if (!methods.add(populateMethod)) continue;
-            HookRegistry.get().hook(populateMethod, new XC_MethodHook() {
+            HookRegistry.get().hook(populateMethod, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    appendPlusMenuItemSafely(param.thisObject);
+                public void after(HookParam param) {
+                    appendPlusMenuItemSafely(param.getThisObject());
                 }
             });
         }
 
         for (Method showMethod : findPlusMenuBaseShowMethods(helperClass)) {
             if (!methods.add(showMethod)) continue;
-            HookRegistry.get().hook(showMethod, new XC_MethodHook() {
+            HookRegistry.get().hook(showMethod, new HookCallback() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    appendPlusMenuItemSafely(param.thisObject);
+                public void before(HookParam param) {
+                    appendPlusMenuItemSafely(param.getThisObject());
                 }
             });
         }

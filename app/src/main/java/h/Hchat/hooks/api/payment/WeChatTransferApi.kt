@@ -11,7 +11,8 @@ import org.json.JSONObject
 import java.lang.reflect.Constructor
 import java.util.Collections
 import java.util.IdentityHashMap
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 
 /**
  * 微信普通转账领取/退回 API。
@@ -133,7 +134,7 @@ class WeChatTransferApi(
         if (queryHookInstalled) return true
         val method = dexFinder?.transferQueryResponseMethod ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
+            HookRegistry.get().hook(method, object : HookCallback() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val callback = pendingQueries.remove(param.thisObject) ?: return
                     callback(

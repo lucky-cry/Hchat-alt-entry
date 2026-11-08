@@ -8,7 +8,8 @@ import h.Hchat.utils.KavaReflector;
 import java.lang.reflect.Method;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 微信 Activity 生命周期监听 API。
@@ -114,11 +115,11 @@ public final class WeChatLifecycleApi {
     private int hookLifecycleMethod(String methodName, String event) {
         try {
             Method method = KavaReflector.findDeclaredMethod(Activity.class, methodName);
-            HookRegistry.get().hook(method, new XC_MethodHook() {
+            HookRegistry.get().hook(method, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject instanceof Activity) {
-                        dispatch(new ActivityEvent(event, (Activity) param.thisObject));
+                public void after(HookParam param) {
+                    if (param.getThisObject() instanceof Activity) {
+                        dispatch(new ActivityEvent(event, (Activity) param.getThisObject()));
                     }
                 }
             });

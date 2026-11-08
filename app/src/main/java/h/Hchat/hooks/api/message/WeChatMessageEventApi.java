@@ -16,7 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 微信消息事件 API。
@@ -69,13 +70,13 @@ public final class WeChatMessageEventApi {
                     if (parseApi.isLikelyAddMsgClass(parameterTypes[i])) addMsgArgIndexes.add(i);
                 }
                 if (addMsgArgIndexes.isEmpty()) continue;
-                HookRegistry.get().hook(method, new XC_MethodHook() {
+                HookRegistry.get().hook(method, new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args == null) return;
+                    public void before(HookParam param) {
+                        if (param.getArgs() == null) return;
                         for (int index : addMsgArgIndexes) {
-                            if (index >= 0 && index < param.args.length && param.args[index] != null) {
-                                dispatchAddMsg(param.args[index]);
+                            if (index >= 0 && index < param.getArgs().length && param.getArgs()[index] != null) {
+                                dispatchAddMsg(param.getArgs()[index]);
                             }
                         }
                     }
@@ -135,11 +136,11 @@ public final class WeChatMessageEventApi {
                 || eventBus == null) {
             return;
         }
-        HookRegistry.get().hook(dexFinder.patDisplayTemplateMethod, new XC_MethodHook() {
+        HookRegistry.get().hook(dexFinder.patDisplayTemplateMethod, new HookCallback() {
             @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                if (param.args == null || param.args.length < 1) return;
-                dispatchPatMsg(param.args[0], param.args.length > 1 ? param.args[1] : null);
+            public void before(HookParam param) {
+                if (param.getArgs() == null || param.getArgs().length < 1) return;
+                dispatchPatMsg(param.getArgs()[0], param.getArgs().length > 1 ? param.getArgs()[1] : null);
             }
         });
         patHooked = true;

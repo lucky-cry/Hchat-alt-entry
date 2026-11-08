@@ -12,7 +12,8 @@ import h.Hchat.utils.KavaReflector;
 import java.lang.reflect.Method;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 当前聊天页 API。
@@ -230,10 +231,10 @@ public final class WeChatChatPageApi {
         if (method == null) return 0;
         try {
             KavaReflector.accessible(method);
-            HookRegistry.get().hook(method, new XC_MethodHook() {
+            HookRegistry.get().hook(method, new HookCallback() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    String talker = firstStringArg(param.args);
+                public void before(HookParam param) {
+                    String talker = firstStringArg(param.getArgs());
                     if (TextUtils.isEmpty(talker)) return;
                     pendingTalker = talker;
                     dispatchEnter(talker, sourceOf(method));
@@ -251,10 +252,10 @@ public final class WeChatChatPageApi {
         if (method == null) return 0;
         try {
             KavaReflector.accessible(method);
-            HookRegistry.get().hook(method, new XC_MethodHook() {
+            HookRegistry.get().hook(method, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    String talker = callStringMethod(param.thisObject, "getStringExtra", CHAT_USER);
+                public void after(HookParam param) {
+                    String talker = callStringMethod(param.getThisObject(), "getStringExtra", CHAT_USER);
                     if (TextUtils.isEmpty(talker)) talker = pendingTalker;
                     if (!TextUtils.isEmpty(talker)) {
                         dispatchEnter(talker, sourceOf(method));
@@ -273,9 +274,9 @@ public final class WeChatChatPageApi {
         if (method == null) return 0;
         try {
             KavaReflector.accessible(method);
-            HookRegistry.get().hook(method, new XC_MethodHook() {
+            HookRegistry.get().hook(method, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookParam param) {
                     String old = currentTalker;
                     currentTalker = "";
                     pendingTalker = "";

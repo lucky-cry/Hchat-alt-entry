@@ -1,7 +1,8 @@
 package h.Hchat.hooks.api.sns
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.utils.KavaReflector
@@ -63,7 +64,7 @@ class WeChatSnsPostObserver(
             }
             ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     if (suppressDispatch.get() == true) return
                     if (param.result != true) return

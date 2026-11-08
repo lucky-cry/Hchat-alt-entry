@@ -16,7 +16,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 微信网络发包器缓存与发包封装。
@@ -58,12 +59,12 @@ public class WeChatNetworkDispatcher {
                 for (Method method : KavaReflector.declaredMethods(queueClass)) {
                     if (!isSendMethodCandidate(method, null) || !hookedQueueMethods.add(method)) continue;
                     try {
-                        HookRegistry.get().hook(method, new XC_MethodHook() {
+                        HookRegistry.get().hook(method, new HookCallback() {
                             @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
+                            public void before(HookParam param) {
                                 if (dispatcherInstance == null
                                         || methodPriority(method) > methodPriority(dispatcherMethod)) {
-                                    cacheDispatcher(param.thisObject, method, "网络发包器已缓存");
+                                    cacheDispatcher(param.getThisObject(), method, "网络发包器已缓存");
                                 }
                             }
                         });

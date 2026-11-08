@@ -8,7 +8,8 @@ import h.Hchat.utils.KavaReflector;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 当前微信 Activity 跟踪 API。
@@ -37,19 +38,19 @@ public final class WeChatCurrentActivityApi {
             Method onResume = KavaReflector.findDeclaredMethod(Activity.class, "onResume");
             Method onPause = KavaReflector.findDeclaredMethod(Activity.class, "onPause");
             Method onDestroy = KavaReflector.findDeclaredMethod(Activity.class, "onDestroy");
-            HookRegistry.get().hook(onResume, new XC_MethodHook() {
+            HookRegistry.get().hook(onResume, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject instanceof Activity) {
-                        currentActivity = new WeakReference<>((Activity) param.thisObject);
+                public void after(HookParam param) {
+                    if (param.getThisObject() instanceof Activity) {
+                        currentActivity = new WeakReference<>((Activity) param.getThisObject());
                     }
                 }
             });
-            XC_MethodHook clearHook = new XC_MethodHook() {
+            XC_MethodHook clearHook = new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookParam param) {
                     Activity current = currentActivity();
-                    if (current != null && current == param.thisObject) {
+                    if (current != null && current == param.getThisObject()) {
                         currentActivity = new WeakReference<>(null);
                     }
                 }
