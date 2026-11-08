@@ -151,6 +151,23 @@ class HookRegistry private constructor() {
 
     fun size(): Int = synchronized(lock) { unhooks.size }
 
+    /** 迁移期统一卸载：兼容 legacy Unhook 与 libxposed HookHandle。 */
+    fun unhookHandle(handle: Any?) {
+        if (handle == null) return
+        if (handle is XC_MethodHook.Unhook) {
+            unhook(handle)
+            return
+        }
+        runCatching {
+            val close = handle.javaClass.methods.firstOrNull {
+                it.name == "close" || it.name == "unhook"
+            } ?: return@runCatching
+            close.isAccessible = true
+            close.invoke(handle)
+        }
+        synchronized(lock) { extraHandles.remove(handle) }
+    }
+
     fun unhook(unhook: XC_MethodHook.Unhook?) {
         if (unhook == null) return
         unhook.unhook()

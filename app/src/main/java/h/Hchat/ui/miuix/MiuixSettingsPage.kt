@@ -1075,14 +1075,14 @@ object MiuixSettingsPage {
         val configVersion = mutableStateOf(0)
         val settingsBackHandlers = SettingsBackHandlerRegistry()
         lateinit var page: FrameLayout
-        val activityBackHooks = ArrayList<HookCallback.Unhook>()
+        val activityBackHooks = ArrayList<Any>()
         var consumingBack = false
         var closed = false
         var agentExitHandler: (() -> Unit)? = null
         fun unhookActivityBack() {
-            activityBackHooks.forEach {
+            activityBackHooks.forEach { handle ->
                 try {
-                    it.unhook()
+                    HookRegistry.get().unhookHandle(handle)
                 } catch (_: Throwable) {
                 }
             }
