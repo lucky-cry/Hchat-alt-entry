@@ -24,7 +24,7 @@ class LibxposedHookEngine(private val xposed: XposedInterface) : HookEngine {
                 chain.proceed(param.consumeArgs() ?: arrayOfNulls<Any?>(0))
             } catch (throwable: Throwable) {
                 param.result = null
-                param.setThrowable(throwable)
+                param.throwable = throwable
                 callback.after(param)
                 throw param.throwable ?: throwable
             }
@@ -55,10 +55,6 @@ class LibxposedHookEngine(private val xposed: XposedInterface) : HookEngine {
             }
 
         override var throwable: Throwable? = null
-
-        override fun setThrowable(throwable: Throwable?) {
-            this.throwable = throwable
-        }
 
         fun consumeArgs(): Array<Any?>? {
             if (argsConsumed) return null

@@ -18,7 +18,6 @@ interface HookParam {
     val args: Array<Any?>?
     var result: Any?
     var throwable: Throwable?
-    fun setThrowable(throwable: Throwable?)
 }
 
 /** 功能层写 Hook 时只依赖这个回调。 */
@@ -62,8 +61,5 @@ class LegacyHookEngine : HookEngine {
                 param.throwable = value
             }
 
-        override fun setThrowable(throwable: Throwable?) {
-            param.throwable = throwable
-        }
     }
 }
