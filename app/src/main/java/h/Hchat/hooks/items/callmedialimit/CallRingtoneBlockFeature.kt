@@ -9,7 +9,9 @@ import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.KavaReflector
+import org.luckypray.dexkit.query.FindClass
 import org.luckypray.dexkit.query.FindMethod
+import org.luckypray.dexkit.query.matchers.ClassMatcher
 import org.luckypray.dexkit.query.matchers.MethodMatcher
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
@@ -159,6 +161,37 @@ private class CallRingtoneBlockHooker(
         return result
     }
 
+
+    /**
+     * 8.0.80 兼容兜底：用「铃声启动」日志锚点定位类，再在类里找唯一的 (Z)->V 入口。
+     * 旧锚点 requestAudioDeviceToStartRing 系列在 8.0.80 已不存在。
+     */
+    private fun locateMultiTalkDirectionMethodsByClassAnchor(): List<Method> {
+        val anchors = listOf(
+            "onStartRing, currentState: %s",
+            "startRing() called with: username = "
+        )
+        val result = LinkedHashSet<Method>()
+        for (anchor in anchors) {
+            val classes = runCatching {
+                context.dexKitBridge().findClass(
+                    FindClass().apply {
+                        matcher(ClassMatcher().apply { usingStrings(listOf(anchor)) })
+                    }
+                )
+            }.getOrElse { emptyList() }
+            for (cd in classes) {
+                val cl = runCatching {
+                    KavaReflector.loadClass(cd.name, context.hostClassLoader())
+                }.getOrNull() ?: continue
+                val direction = KavaReflector.declaredMethods(cl).filter(::isMultiTalkDirectionMethod)
+                if (direction.size == 1) result.add(direction.first())
+            }
+            if (result.isNotEmpty()) break
+        }
+        return result.toList()
+    }
+
     private fun locateMultiTalkDirectionMethods(): List<Method> {
         val runtimeKey = runtimeKey()
         DexMethodCache.loadList(
@@ -194,6 +227,14 @@ private class CallRingtoneBlockHooker(
                 .singleOrNull()
         }.distinctBy { it.toGenericString() }
 
+        if (methods.isEmpty()) {
+            // 8.0.80 起旧路由锚点全部消失，改为按类锚点直接找 (Z)->V 的铃声入口。
+            val classFallback = locateMultiTalkDirectionMethodsByClassAnchor()
+            if (classFallback.isNotEmpty()) {
+                DexMethodCache.saveList(methodCache, runtimeKey, CACHE_MULTI_TALK_DIRECTION_METHODS, classFallback)
+                return classFallback
+            }
+        }
         if (methods.isEmpty()) {
             DexMethodCache.clear(methodCache, runtimeKey, CACHE_MULTI_TALK_DIRECTION_METHODS)
             logger("未定位微信群通话铃声入口", null)
