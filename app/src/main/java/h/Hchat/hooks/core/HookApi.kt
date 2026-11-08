@@ -17,6 +17,7 @@ interface HookParam {
     val thisObject: Any?
     val args: Array<Any?>?
     var result: Any?
+    var throwable: Throwable?
     fun setThrowable(throwable: Throwable?)
 }
 
@@ -53,6 +54,12 @@ class LegacyHookEngine : HookEngine {
             get() = param.result
             set(value) {
                 param.result = value
+            }
+
+        override var throwable: Throwable?
+            get() = param.throwable
+            set(value) {
+                param.throwable = value
             }
 
         override fun setThrowable(throwable: Throwable?) {
