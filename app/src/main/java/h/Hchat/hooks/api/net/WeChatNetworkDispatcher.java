@@ -52,6 +52,22 @@ public class WeChatNetworkDispatcher {
             log("网络队列类为null，且没有候选类");
             return;
         }
+        // 已定位到队列类时只 Hook 它，避免 8.0.80 候选集合里的 UI/回调类
+        // 也带 n1 参数方法而被误当成发包器。只有主类 Hook 不到时才扫候选。
+        int hooked = netQueueClass != null
+                ? hookQueueClasses(Collections.singletonList(netQueueClass))
+                : hookQueueClasses(new ArrayList<>(classes));
+        if (hooked == 0 && netQueueClass != null) {
+            hooked = hookQueueClasses(new ArrayList<>(classes));
+        }
+        if (hooked == 0 && hookedQueueMethods.isEmpty()) {
+            log("网络队列候选类无合适方法可Hook: " + classes.size());
+        } else if (hooked > 0) {
+            log("网络队列补装Hook: classes=" + classes.size() + " methods=" + hooked);
+        }
+    }
+
+    private int hookQueueClasses(List<Class<?>> classes) {
         int hooked = 0;
         for (Class<?> queueClass : classes) {
             if (queueClass == null) continue;
@@ -78,11 +94,7 @@ public class WeChatNetworkDispatcher {
                 log("网络队列类扫描失败: " + queueClass.getName() + " " + e.getMessage());
             }
         }
-        if (hooked == 0 && hookedQueueMethods.isEmpty()) {
-            log("网络队列候选类无合适方法可Hook: " + classes.size());
-        } else if (hooked > 0) {
-            log("网络队列补装Hook: classes=" + classes.size() + " methods=" + hooked);
-        }
+        return hooked;
     }
 
     public boolean send(Object request) {
@@ -163,7 +175,8 @@ public class WeChatNetworkDispatcher {
             if (method == null) return false;
             String name = method.getName();
             if ("equals".equals(name) || "hashCode".equals(name) || "toString".equals(name)
-                    || "wait".equals(name) || "notify".equals(name) || "notifyAll".equals(name)) {
+                    || "wait".equals(name) || "notify".equals(name) || "notifyAll".equals(name)
+                    || "d".equals(name) || "cancel".equals(name)) {
                 return false;
             }
             Class<?>[] params = method.getParameterTypes();
@@ -182,10 +195,22 @@ public class WeChatNetworkDispatcher {
 
     private boolean isNetworkRequestType(Class<?> type) {
         if (type == null || type.isPrimitive()) return false;
-        Method getType = KavaReflector.findMethodRecursive(type, "getType");
-        return getType != null
-                && getType.getParameterTypes().length == 0
-                && getType.getReturnType() == int.class;
+        // 8.0.80 的队列请求基类是 com.tencent.mm.modelbase.n1，getType() 为抽象方法；
+        // KavaRef 的 declared 查找在部分抽象方法上拿不到，因此保留按类名的快速判定。
+        if ("com.tencent.mm.modelbase.n1".equals(type.getName())) return true;
+        try {
+            Method getType = KavaReflector.findMethodRecursive(type, "getType");
+            if (getType != null && getType.getParameterTypes().length == 0) {
+                return getType.getReturnType() == int.class
+                        || getType.getReturnType() == Integer.class;
+            }
+            getType = type.getDeclaredMethod("getType");
+            return getType.getParameterTypes().length == 0
+                    && (getType.getReturnType() == int.class
+                    || getType.getReturnType() == Integer.class);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private Object unwrapRequest(Object request) {

@@ -140,6 +140,11 @@ public class RedPacketSilentHandler {
             // 企业微信红包的 sceneid 在不同版本/入口不一定固定为 1005。
             boolean useUnion = RedPacketParser.getLuckyMoneySceneId(content, talker, nativeUrl) == 1005
                     || RedPacketParser.isUnionLuckyMoney(content, talker, nativeUrl);
+            // 8.0.80 已没有普通 receivewxhb/openwxhb 请求类，统一走 Union 请求。
+            if (!useUnion && dexFinder.receiveLuckyMoneyClass == null) {
+                useUnion = true;
+                log("  普通红包请求类缺失，回退 Union 请求");
+            }
             if (useUnion && (dexFinder.receiveLuckyMoneyUnionClass == null
                     || dexFinder.openLuckyMoneyUnionClass == null)) {
                 log("  放弃: 企业红包 Union 请求类不完整 receive="

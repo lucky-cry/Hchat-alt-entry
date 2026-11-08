@@ -64,5 +64,67 @@ LSPosed 里能看到模块、能勾选作用域，**日志里没有模块输出�
 | 问题 | 日志 | 影响 |
 |---|---|---|
 | 网络派发器未定位 | `sendNetworkRequest 失败: dispatcher=false method=false` ×18 | 自动抢红包/自动收款、脚本发网络请求会静默失效 |
-| LauncherUI#onCreate 未找到 | `[Hchat:Hook] 未找到方法: com.tencent.mm.ui.LauncherUI#onCreate` ×2 | 设置入口注入部分失效 |
+| LauncherUI#onCreate 未找到 | `[Hchat:Hook] 未找到方法: com.tencent.mm.ui.LauncherUI#onCreate` ×2 | 设置入口注入部分失效（后续已修，当前设置入口正常） |
 | 自动礼物消息类缺失 | `HchatGift 未找到消息类` ×12 | 自动礼物（已知未修） |
+
+## 六、微信 8.0.80 网络队列定位（2026-11-08 实测）
+
+### 现象
+
+```text
+[Hchat:DexFinder] 网络队列解析: class=null candidates=54 resolved=false
+    receive=false receiveUnion=false open=false openUnion=false
+```
+
+`candidates=54` 说明 DexKit 已找到候选类，但旧的筛选条件全部不命中。
+
+### 逆向结论
+
+用 `scripts/dex_string_refs.py` / `scripts/dex_class_methods.py` 和 jadx 对
+8.0.80 `base.apk`（versionCode 3220）分析：
+
+- 旧锚点 `doSceneImp`、`waitingQueue_size`、`dispatcher is null` 已没有代码引用；
+- `MicroMsg.NetSceneQueue` 仍被 `com.tencent.mm.modelbase.s1` 引用；
+- `s1` 就是 NetSceneQueue：
+  - `g(com.tencent.mm.modelbase.n1) -> boolean`，内部直接 `h(n1, 0)`；
+  - `h(com.tencent.mm.modelbase.n1, int) -> boolean` 是真正的入队/发包；
+  - `i(n1, int) -> void`、`j(n1, int, int, int) -> void` 是运行队列处理；
+  - 还实现了 `u0` 回调并引用 `MicroMsg.NetSceneQueue`。
+- 旧的已知类 `com.tencent.mm.modelbase.r1` 在 8.0.80 只剩一个接口方法 `u() -> int`，
+  不是队列。
+- 请求基类 `com.tencent.mm.modelbase.n1` 是抽象类，`getType() -> int` 是抽象方法。
+
+普通红包请求类也发生了变化：
+
+- `cgi-bin/mmpay-bin/receivewxhb` / `openwxhb` / `receivehongbao` 只剩字符串池，
+  没有代码引用，因此 `receiveLuckyMoneyClass`、`openLuckyMoneyClass` 为 null；
+- 实际请求类是 Union 类：
+  - `com.tencent.mm.plugin.luckymoney.model.o6`：6 参构造；
+  - `com.tencent.mm.plugin.luckymoney.model.i6`：10 参构造；
+  - 两者继承链最终都是 `com.tencent.mm.modelbase.n1`。
+
+### 修复
+
+1. `DexFinder.collectKnownNetworkQueueClasses()` 增加
+   `com.tencent.mm.modelbase.s1`。
+2. 队列判定增加形状兜底：方法名 `g/h/i/j` 或 `dispatch/add/send`，首参是
+   带 `getType() -> int` 的请求类型，返回 `boolean/int/void`。
+3. `WeChatNetworkDispatcher.isNetworkRequestType()` 对 `n1` 增加按类名快速判定，
+   并对抽象 `getType()` 补 `getDeclaredMethod` 兜底。
+4. 缓存命中时补解析 Union 红包类（`receiveUnionLocatorResolved` /
+   `openUnionLocatorResolved`），避免旧快照把 null 永久缓存。
+5. `NETWORK_QUEUE_LOCATOR_VERSION` 升到 3，强制旧缓存重新定位。
+6. 普通红包请求类为空时，`RedPacketSilentHandler` 回退到 Union 请求类。
+
+### 真机验证点
+
+重装模块并重启微信后，日志应出现：
+
+```text
+网络队列候选命中: com.tencent.mm.modelbase.s1
+网络队列解析: class=com.tencent.mm.modelbase.s1 ... resolved=true
+网络发包器已缓存: com.tencent.mm.modelbase.s1#g
+```
+
+随后发一个普通红包，应出现 `普通红包请求类缺失，回退 Union 请求`，
+并能看到 `静默收包` / `拆红包请求已发送`。

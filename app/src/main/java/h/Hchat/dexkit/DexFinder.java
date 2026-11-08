@@ -56,7 +56,7 @@ public class DexFinder {
     private static final String RED_PACKET_UNION_LOCATOR_VERSION_KEY = "redpacket.union.locator.version";
     private static final String RED_PACKET_UNION_LOCATOR_VERSION = "1";
     private static final String NETWORK_QUEUE_LOCATOR_VERSION_KEY = "network.queue.locator.version";
-    private static final String NETWORK_QUEUE_LOCATOR_VERSION = "2";
+    private static final String NETWORK_QUEUE_LOCATOR_VERSION = "3";
     private static final boolean VERBOSE = false;
     private final DexKitBridge dexKit;
     private final ClassLoader classLoader;
@@ -300,6 +300,17 @@ public class DexFinder {
                 // 旧快照可能把「解析失败」也缓存了，这里补一次，避免消息变更监听永久失效。
                 h.Hchat.utils.HLog.e(TAG + " 缓存缺少 sqliteWrapper，补解析一次");
                 resolveDatabaseApiInternal();
+                repaired = true;
+            }
+            if (!receiveUnionLocatorResolved || !openUnionLocatorResolved) {
+                // 旧快照可能把 Union 红包请求类也缓存成 null；而 8.0.80 的普通
+                // receivewxhb/openwxhb 字符串已没有代码引用，只能走 Union 请求类。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少红包Union类，补解析一次");
+                if (!receiveUnionLocatorResolved) resolveReceiveLuckyMoneyUnion();
+                if (!openUnionLocatorResolved) resolveOpenLuckyMoneyUnion();
+                h.Hchat.utils.HLog.e(TAG + " 红包Union补解析结果: receive="
+                        + (receiveLuckyMoneyUnionClass != null)
+                        + " open=" + (openLuckyMoneyUnionClass != null));
                 repaired = true;
             }
             if (netQueueClass == null || !networkQueueLocatorResolved) {
@@ -606,8 +617,9 @@ public class DexFinder {
             // 先按真实红包请求类型筛选，避免 doSceneImp 的普通业务类抢到首位。
             collectNetworkQueueClassesByAnchors();
             for (Class<?> candidate : netQueueCandidateClasses) {
-                if (hasQueueSendMethodForRequests(candidate)) {
+                if (isQueueClassCandidate(candidate)) {
                     netQueueClass = candidate;
+                    h.Hchat.utils.HLog.e(TAG + " 网络队列候选命中: " + candidate.getName());
                     break;
                 }
             }
@@ -620,7 +632,7 @@ public class DexFinder {
                     try {
                         Class<?> cl = KavaReflector.loadClass(m.getClassName(), classLoader);
                         addNetQueueCandidate(cl);
-                        if (hasQueueSendMethodForRequests(cl)) {
+                        if (isQueueClassCandidate(cl)) {
                             netQueueClass = cl;
                             break;
                         }
@@ -638,7 +650,7 @@ public class DexFinder {
                 }
             }
 
-            if (netQueueClass == null || !hasQueueSendMethodForRequests(netQueueClass)) {
+            if (netQueueClass == null || !isQueueClassCandidate(netQueueClass)) {
                 Class<?> sendClass = findFirstLikelyQueueClass();
                 if (sendClass != null) netQueueClass = sendClass;
             }
@@ -672,7 +684,7 @@ public class DexFinder {
             }
 
             networkQueueLocatorResolved = netQueueClass != null
-                    && hasQueueSendMethodForRequests(netQueueClass);
+                    && isQueueClassCandidate(netQueueClass);
 
             logDetail("网络队列类: " +
                     (netQueueClass != null ? netQueueClass.getName() : "null")
@@ -5558,9 +5570,18 @@ public class DexFinder {
 
     private Class<?> findFirstLikelyQueueClass() {
         for (Class<?> cl : netQueueCandidateClasses) {
-            if (hasQueueSendMethodForRequests(cl)) return cl;
+            if (isQueueClassCandidate(cl)) return cl;
         }
         return null;
+    }
+
+    /**
+     * 队列类判定：优先用红包请求类精确匹配；8.0.80 的普通红包请求类已消失，
+     * 再用「g/h/i/j + 请求类型（带 getType()）+ boolean/int/void 返回」兜底。
+     */
+    private boolean isQueueClassCandidate(Class<?> cl) {
+        if (cl != null && "com.tencent.mm.modelbase.s1".equals(cl.getName())) return true;
+        return cl != null && (hasQueueSendMethodForRequests(cl) || hasQueueLikeDispatchMethod(cl));
     }
 
     private boolean hasLikelyQueueSendMethod(Class<?> cl) {
@@ -5623,18 +5644,26 @@ public class DexFinder {
     }
 
 
-    /** 兜底：队列类通常有 dispatch/add(XxxReq, int) 或 dispatch(XxxReq) 且返回 boolean/int。 */
+    /**
+     * 兜底：队列类通常有 dispatch/add(XxxReq, int) 或 dispatch(XxxReq) 且返回 boolean/int。
+     * 8.0.80 的 NetSceneQueue（com.tencent.mm.modelbase.s1）混淆后方法名是 g/h/i/j，
+     * 所以这里也接受这些短名；要求首参是带 getType() 的请求类型，避免误伤普通工具类。
+     */
     private boolean hasQueueLikeDispatchMethod(Class<?> cl) {
         if (cl == null) return false;
         try {
             for (Method method : KavaReflector.declaredMethods(cl)) {
                 String name = method.getName();
-                if (!"dispatch".equals(name) && !"add".equals(name) && !"send".equals(name)) continue;
+                if (!"dispatch".equals(name) && !"add".equals(name) && !"send".equals(name)
+                        && !"g".equals(name) && !"h".equals(name)
+                        && !"i".equals(name) && !"j".equals(name)) continue;
                 Class<?>[] params = method.getParameterTypes();
                 if (params == null || (params.length != 1 && params.length != 2)) continue;
                 if (params.length == 2 && params[1] != int.class && params[1] != Integer.class) continue;
                 Class<?> first = params[0];
                 if (first == null || first.isPrimitive() || first == String.class || first == Object.class) continue;
+                if (!isNetworkRequestType(first)
+                        && !"com.tencent.mm.modelbase.n1".equals(first.getName())) continue;
                 Class<?> rt = method.getReturnType();
                 if (rt == boolean.class || rt == Boolean.class || rt == int.class
                         || rt == Integer.class || rt == void.class) return true;
@@ -5643,7 +5672,6 @@ public class DexFinder {
         }
         return false;
     }
-
 
     /** 统计类中「(非基本类型请求[, int]) -> boolean/int/void」形状的方法数，用于兜底挑队列类。 */
     private int countQueueShapedMethods(Class<?> cl) {
@@ -5672,6 +5700,24 @@ public class DexFinder {
         } catch (Throwable ignored) {
         }
         return score;
+    }
+
+    /** 微信网络请求基类（NetScene 请求）通常带 getType() -> int。 */
+    private boolean isNetworkRequestType(Class<?> type) {
+        if (type == null || type.isPrimitive()) return false;
+        try {
+            Method getType = KavaReflector.findMethodRecursive(type, "getType");
+            if (getType != null && getType.getParameterTypes().length == 0) {
+                return getType.getReturnType() == int.class || getType.getReturnType() == Integer.class;
+            }
+            // KavaRef 的 declared 查找在部分抽象方法上可能拿不到，直接补一次反射。
+            getType = type.getDeclaredMethod("getType");
+            return getType.getParameterTypes().length == 0
+                    && (getType.getReturnType() == int.class
+                    || getType.getReturnType() == Integer.class);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private void logMissingCritical() {
@@ -6348,6 +6394,8 @@ public class DexFinder {
 
     private void collectKnownNetworkQueueClasses() {
         String[] names = {
+                // 8.0.80 的 NetSceneQueue：g(n1)->Z / h(n1,int)->Z 就是入队发包。
+                "com.tencent.mm.modelbase.s1",
                 "tk0.j1",
                 "gp0.j1",
                 "com.tencent.mm.modelbase.r1",
