@@ -114,7 +114,7 @@ class HookRegistry private constructor() {
     }
 
     /** 迁移期重载：调用点无需改动，回调类型换成 HookCallback 即可。 */
-    fun hook(method: Member, callback: HookCallback): Any? = hookForMigration(method, callback)
+    fun hook(method: Member, callback: HookCallback): Any = hookForMigration(method, callback) ?: Unit
 
     /** 迁移期重载：接受引擎返回的任意句柄（HookHandle 或 Unhook）。 */
     fun add(handle: Any?) {
