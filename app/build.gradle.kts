@@ -100,6 +100,7 @@ dependencies {
     compileOnly("de.robv.android.xposed:api:82")
     // 迁移目标：libxposed API 102（与参考项目 BetterHeybox 一致）
     compileOnly("io.github.libxposed:api:102.0.0")
+    implementation("io.github.libxposed:service:102.0.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     implementation("io.github.billywei01:fastkv:3.0.1")

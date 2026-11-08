@@ -20,5 +20,11 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+        <!-- libxposed 102：LSPosed 通过该 provider 识别模块并读取作用域 -->
+        <provider
+            android:name="io.github.libxposed.service.XposedProvider"
+            android:exported="true"
+            android:authorities="h.Hchat.XposedService" />
+
     </application>
 </manifest>
