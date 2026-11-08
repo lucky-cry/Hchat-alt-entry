@@ -3,8 +3,10 @@ package h.Hchat.hooks.items.script.agent
 import android.content.Context
 import android.content.res.Resources
 import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.hooks.core.HookParam
 import h.Hchat.utils.HLog
+import h.Hchat.utils.KavaReflector
 
 object ModuleResourceMenuFallback {
 
@@ -32,12 +34,11 @@ object ModuleResourceMenuFallback {
     private fun hookClickDispatch(classLoader: ClassLoader) {
         try {
             val menuBuilderClass = Class.forName(MENU_BUILDER, false, classLoader)
-            XposedHelpers.findAndHookMethod(
+            HookRegistry.get().hookMethodByName(
                 MENU_BUILDER,
                 classLoader,
                 "dispatchMenuItemSelected",
-                menuBuilderClass,
-                android.view.MenuItem::class.java,
+                arrayOf(menuBuilderClass, android.view.MenuItem::class.java),
                 object : HookCallback {
                     override fun before(param: HookParam) {
                         val item = param.args?.getOrNull(1) as? android.view.MenuItem ?: return
@@ -73,8 +74,8 @@ object ModuleResourceMenuFallback {
 
     private fun closeActionMode(menu: Any?) {
         runCatching {
-            val actionMode = XposedHelpers.getObjectField(menu, "mCallback") ?: return
-            XposedHelpers.callMethod(actionMode, "finish")
+            val actionMode = KavaReflector.readField(menu, "mCallback") ?: return
+            KavaReflector.invokeMethod(actionMode, "finish")
         }
     }
 
@@ -89,14 +90,11 @@ object ModuleResourceMenuFallback {
 
     private fun hookTitleResourceOverload(classLoader: ClassLoader, method: String) {
         try {
-            XposedHelpers.findAndHookMethod(
+            HookRegistry.get().hookMethodByName(
                 MENU_BUILDER,
                 classLoader,
                 method,
-                INT,
-                INT,
-                INT,
-                INT,
+                arrayOf(INT, INT, INT, INT),
                 object : HookCallback {
                     override fun before(param: HookParam) {
                         val args = param.args ?: return
@@ -124,10 +122,9 @@ object ModuleResourceMenuFallback {
                         if (termuxMenu) markSelectionMenu(param.thisObject ?: return)
 
                         val item = runCatching {
-                            XposedHelpers.callMethod(
+                            KavaReflector.invokeMethod(
                                 param.thisObject,
                                 method,
-                                arrayOf(INT, INT, INT, CharSequence::class.java),
                                 args[0],
                                 args[1],
                                 args[2],
@@ -151,17 +148,17 @@ object ModuleResourceMenuFallback {
     }.getOrDefault(false)
 
     private fun fromMenuCallback(menuBuilder: Any): Boolean = runCatching {
-        val actionMode = XposedHelpers.getObjectField(menuBuilder, "mCallback") ?: return false
-        val callback = XposedHelpers.getObjectField(actionMode, "mCallback") ?: return false
+        val actionMode = KavaReflector.readField(menuBuilder, "mCallback") ?: return false
+        val callback = KavaReflector.readField(actionMode, "mCallback") ?: return false
         callback.javaClass.name.startsWith("com.termux.view")
     }.getOrDefault(false)
 
     private fun resourcesOf(menuBuilder: Any): Resources? =
-        runCatching { XposedHelpers.getObjectField(menuBuilder, "mResources") as? Resources }
+        runCatching { KavaReflector.readField(menuBuilder, "mResources") as? Resources }
             .getOrNull()
-            ?: runCatching { XposedHelpers.callMethod(menuBuilder, "getResources") as? Resources }
+            ?: runCatching { KavaReflector.invokeMethod(menuBuilder, "getResources") as? Resources }
                 .getOrNull()
 
     private fun contextOf(menuBuilder: Any): Context? =
-        runCatching { XposedHelpers.callMethod(menuBuilder, "getContext") as? Context }.getOrNull()
+        runCatching { KavaReflector.invokeMethod(menuBuilder, "getContext") as? Context }.getOrNull()
 }
