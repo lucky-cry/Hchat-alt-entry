@@ -20,6 +20,11 @@ interface HookParam {
     var result: Any?
     var throwable: Throwable?
     val hasThrowable: Boolean get() = throwable != null
+
+    /** 兼容 Xposed 的 per-hook 附加数据（102 下由实现自行存储）。 */
+    fun getObjectExtra(key: String): Any? = null
+
+    fun setObjectExtra(key: String, value: Any?) {}
 }
 
 /** 功能层写 Hook 时只依赖这个回调。 */
@@ -59,6 +64,12 @@ class LegacyHookEngine : HookEngine {
             }
 
         override val hasThrowable: Boolean get() = param.hasThrowable()
+
+        override fun getObjectExtra(key: String): Any? = param.getObjectExtra(key)
+
+        override fun setObjectExtra(key: String, value: Any?) {
+            param.setObjectExtra(key, value)
+        }
         override var throwable: Throwable?
             get() = param.throwable
             set(value) {

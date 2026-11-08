@@ -134,7 +134,7 @@ internal object ConversationTabsRuntime {
                     if (param.hasThrowable || !clazz.isInstance(param.thisObject)) return
                     val original = param.result as? View ?: return
                     clearChangedAccount()
-                    ensureHost(param.thisObject, original)
+                    ensureHost(param.thisObject ?: return, original)
                     reload()
                 }
             })
@@ -143,8 +143,8 @@ internal object ConversationTabsRuntime {
                     if (param.hasThrowable || !clazz.isInstance(param.thisObject)) return
                     clearChangedAccount()
                     // getLayoutView inflates a NEW root. Read the existing native root instead.
-                    val root = KavaReflector.readField(rootField, param.thisObject) as? View
-                    if (root != null) ensureHost(param.thisObject, root)
+                    val root = KavaReflector.readField(rootField, param.thisObject ?: return) as? View
+                    if (root != null) ensureHost(param.thisObject ?: return, root)
                     reload()
                 }
             })
@@ -161,7 +161,7 @@ internal object ConversationTabsRuntime {
             hookedMainUi = clazz
             true
         }.getOrElse {
-            hooks.forEach { hook -> HookRegistry.get().unhook(hook) }
+            hooks.forEach { hook -> HookRegistry.get().unhookHandle(hook) }
             HLog.e("$TAG 安装 MainUI 生命周期失败", it)
             false
         }
