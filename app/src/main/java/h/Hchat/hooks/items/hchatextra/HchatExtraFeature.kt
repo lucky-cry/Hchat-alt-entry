@@ -541,7 +541,7 @@ private class HchatExtraHooker(
                         val outer = stack?.lastOrNull { state.root != null && it.root === state.root }
                         if (outer != null && state.message != null) outer.message = state.message
                         if (stack?.isEmpty() == true) messageDetailsBindStates.remove()
-                        if (outer != null || !messageDetailsConfig.enabled || param.hasThrowable) return
+                        if (outer != null || !messageDetailsConfig.enabled || param.hasThrowable()) return
                         runCatching {
                             bindBottomMessageDetails(
                                 param.thisObject, param.args, 0,
