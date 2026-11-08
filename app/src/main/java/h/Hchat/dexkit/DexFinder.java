@@ -296,10 +296,18 @@ public class DexFinder {
         networkQueueLocatorResolved = false;
         if (loadCache()) {
             resolvedAll = true;
+            boolean repaired = false;
+            if (sqliteDbWrapperClass == null) {
+                // 旧快照可能把「解析失败」也缓存了，这里补一次，避免消息变更监听永久失效。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少 sqliteWrapper，补解析一次");
+                resolveDatabaseApiInternal();
+                repaired = true;
+            }
             if (!isSendTextLocatorCacheCurrent()) {
                 resolveSendTextMsg();
-                saveCache();
+                repaired = true;
             }
+            if (repaired) saveCache();
             logDetail("命中缓存: " + shortKey(runtimeCacheKey));
             return;
         }
@@ -2586,13 +2594,16 @@ public class DexFinder {
 
     // ============ 数据库/联系人公共 API ============
     public void resolveDatabaseApi() {
-        h.Hchat.utils.HLog.e(TAG + " [DBDiag] 进入解析: 缓存值 sqlite="
-                + (sqliteDbWrapperClass != null ? sqliteDbWrapperClass.getName() : "null"));
-        if (ensureSnapshotLoaded()) {
+        // 缓存里 sqliteWrapper 为空时不能当作"已解析"，否则永不再解析（8.0.80 实测踩过）。
+        if (ensureSnapshotLoaded() && sqliteDbWrapperClass != null) {
             h.Hchat.utils.HLog.e(TAG + " [DBDiag] 命中缓存快照，跳过解析: sqlite="
-                    + (sqliteDbWrapperClass != null ? sqliteDbWrapperClass.getName() : "null"));
+                    + sqliteDbWrapperClass.getName());
             return;
         }
+        resolveDatabaseApiInternal();
+    }
+
+    private void resolveDatabaseApiInternal() {
         try {
             if (coreStorageGetter != null && sqliteDbWrapperClass != null && configStorageClass != null) return;
 
