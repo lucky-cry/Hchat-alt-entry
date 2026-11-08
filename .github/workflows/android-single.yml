@@ -7,9 +7,9 @@ permissions:
   contents: write
 
 env:
-  HCAT_SINGLE_VERSION_NAME_BASE: "5.5.6"
-  HCAT_SINGLE_VERSION_CODE_BASE: "490"
-  HCAT_SINGLE_RUN_NUMBER_BASE: "294"
+  HCAT_SINGLE_VERSION_NAME_BASE: "6.4.1"
+  HCAT_SINGLE_VERSION_CODE_BASE: "600"
+  HCAT_SINGLE_RUN_NUMBER_BASE: "0"
 
 jobs:
   build:
@@ -144,7 +144,7 @@ jobs:
             exit 1
           fi
           mkdir -p app/keystore
-          echo "$HCAT_KEYSTORE_BASE64" | base64 -d > app/keystore/。。.jks
+          echo "$HCAT_KEYSTORE_BASE64" | base64 -d > app/keystore/release.jks
 
       - name: 构建当前频道 APK
         env:

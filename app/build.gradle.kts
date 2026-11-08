@@ -26,8 +26,8 @@ android {
     }
 
     signingConfigs {
-        create("。。") {
-            storeFile = file("keystore/。。.jks")
+        create("release") {
+            storeFile = file("keystore/release.jks")
             storePassword = providers.environmentVariable("HCAT_STORE_PASSWORD").orNull
                 ?: error("缺少 HCAT_STORE_PASSWORD")
             keyAlias = providers.environmentVariable("HCAT_KEY_ALIAS").orNull
@@ -39,7 +39,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("。。")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
