@@ -642,6 +642,16 @@ public class DexFinder {
                 Class<?> sendClass = findFirstLikelyQueueClass();
                 if (sendClass != null) netQueueClass = sendClass;
             }
+            if (netQueueClass == null) {
+                // 8.0.80 兜底：红包请求类可能已变化，改按「dispatch/add + 非基本类型参数 + 布尔返回」找队列。
+                for (Class<?> candidate : netQueueCandidateClasses) {
+                    if (hasQueueLikeDispatchMethod(candidate)) {
+                        netQueueClass = candidate;
+                        h.Hchat.utils.HLog.e(TAG + " 网络队列兜底命中: " + candidate.getName());
+                        break;
+                    }
+                }
+            }
 
             networkQueueLocatorResolved = netQueueClass != null
                     && hasQueueSendMethodForRequests(netQueueClass);
@@ -652,7 +662,11 @@ public class DexFinder {
             h.Hchat.utils.HLog.e(TAG + " 网络队列解析: class="
                     + (netQueueClass != null ? netQueueClass.getName() : "null")
                     + " candidates=" + netQueueCandidateClasses.size()
-                    + " resolved=" + networkQueueLocatorResolved);
+                    + " resolved=" + networkQueueLocatorResolved
+                    + " receive=" + (receiveLuckyMoneyClass != null)
+                    + " receiveUnion=" + (receiveLuckyMoneyUnionClass != null)
+                    + " open=" + (openLuckyMoneyClass != null)
+                    + " openUnion=" + (openLuckyMoneyUnionClass != null));
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveQueue 失败: " + e.getMessage(), e);
         }
@@ -5587,6 +5601,28 @@ public class DexFinder {
                         || rt == Integer.class || rt == void.class) return true;
             }
         } catch (Throwable ignored) {}
+        return false;
+    }
+
+
+    /** 兜底：队列类通常有 dispatch/add(XxxReq, int) 或 dispatch(XxxReq) 且返回 boolean/int。 */
+    private boolean hasQueueLikeDispatchMethod(Class<?> cl) {
+        if (cl == null) return false;
+        try {
+            for (Method method : KavaReflector.declaredMethods(cl)) {
+                String name = method.getName();
+                if (!"dispatch".equals(name) && !"add".equals(name) && !"send".equals(name)) continue;
+                Class<?>[] params = method.getParameterTypes();
+                if (params == null || (params.length != 1 && params.length != 2)) continue;
+                if (params.length == 2 && params[1] != int.class && params[1] != Integer.class) continue;
+                Class<?> first = params[0];
+                if (first == null || first.isPrimitive() || first == String.class || first == Object.class) continue;
+                Class<?> rt = method.getReturnType();
+                if (rt == boolean.class || rt == Boolean.class || rt == int.class
+                        || rt == Integer.class || rt == void.class) return true;
+            }
+        } catch (Throwable ignored) {
+        }
         return false;
     }
 
