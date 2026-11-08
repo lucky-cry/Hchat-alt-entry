@@ -29,7 +29,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
-import de.robv.android.xposed.XposedBridge;
 
 /**
  * 微信图片发送 API。
@@ -340,13 +339,12 @@ public final class WeChatImageApi {
                     rememberMarsCdnManager(managerClass, param != null ? param.getThisObject() : null);
                 }
             };
-            Set<HookCallback.Unhook> unhooks = XposedBridge.hookAllConstructors(
+            for (Object unhook : HookRegistry.get().hookAllConstructors(
                     managerClass,
-                    captureConstructedManager);
-            for (HookCallback.Unhook unhook : unhooks) {
+                    captureConstructedManager)) {
                 HookRegistry.get().add(unhook);
             }
-            Set<HookCallback.Unhook> startUnhooks = XposedBridge.hookAllMethods(
+            for (Object unhook : HookRegistry.get().hookAllMethods(
                     managerClass,
                     "startC2CDownload",
                     new HookCallback() {
@@ -356,8 +354,7 @@ public final class WeChatImageApi {
                                     managerClass,
                                     param != null ? param.getThisObject() : null);
                         }
-                    });
-            for (HookCallback.Unhook unhook : startUnhooks) {
+                    })) {
                 HookRegistry.get().add(unhook);
             }
             resolveMarsCdnManager(managerClass);

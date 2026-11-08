@@ -30,7 +30,6 @@ import java.util.Map;
 
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 import h.Hchat.dexkit.SettingsDexFinder;
@@ -78,7 +77,7 @@ public class SettingsInjector {
     private final SettingsEntrySettings entrySettings;
     private final File dexCacheDir;
     private final HashSet<Class<?>> plusMenuAdapterViewHookedClasses = new HashSet<>();
-    private HookCallback.Unhook contextGetStringUnhook;
+    private Object contextGetStringUnhook;
     private volatile Class<?> modernLocationParentClass;
     private volatile Class<?> modernLocationFrontClass;
 
@@ -746,7 +745,7 @@ public class SettingsInjector {
             Class<?> plusActionViewClass = KavaReflector.loadClass(
                     "com.tencent.mm.ui.HomeUI$PlusActionView", classLoader);
             if (plusActionViewClass == null) return false;
-            for (HookCallback.Unhook unhook : XposedBridge.hookAllConstructors(
+            for (Object unhook : HookRegistry.get().hookAllConstructors(
                     plusActionViewClass,
                     new HookCallback() {
                         @Override
@@ -1430,7 +1429,7 @@ public class SettingsInjector {
 
     private void logDetail(String message) {
         if (VERBOSE) {
-            XposedBridge.log(TAG + " " + message);
+            h.Hchat.utils.HLog.e(TAG + " " + message);
         }
     }
 }
