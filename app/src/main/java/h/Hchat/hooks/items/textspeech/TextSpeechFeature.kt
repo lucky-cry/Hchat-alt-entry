@@ -2,7 +2,8 @@ package h.Hchat.hooks.items.textspeech
 
 import android.app.Activity
 import android.view.KeyEvent
-import de.robv.android.xposed.HookCallback
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.BaseFeature

@@ -4,7 +4,8 @@ import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import de.robv.android.xposed.HookCallback
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry

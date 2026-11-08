@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.autooriginal
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import de.robv.android.xposed.HookCallback
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry

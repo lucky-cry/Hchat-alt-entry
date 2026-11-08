@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.zombiecheck
 
-import de.robv.android.xposed.HookCallback
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis

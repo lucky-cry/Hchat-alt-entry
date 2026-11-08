@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.forwardlimit
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import de.robv.android.xposed.HookCallback
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
