@@ -450,7 +450,7 @@ class ScriptPluginBridge internal constructor(
     }
 
     fun findClass(className: String): Class<*> {
-        return KavaReflector.loadClass(className, classLoader)
+        return KavaReflector.loadClass(className, classLoader) ?: return null
     }
 
     fun firstMethod(instance: Any?, methodName: String?): Method? = firstMethod(instance, methodName, -1)

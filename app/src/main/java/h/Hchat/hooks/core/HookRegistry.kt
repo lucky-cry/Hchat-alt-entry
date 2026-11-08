@@ -141,9 +141,9 @@ class HookRegistry private constructor() {
             generation++
             unhooks.toList().also { unhooks.clear() }
         }
-        for (unhook in previous) {
+        for (handle in previous) {
             try {
-                unhook.unhook()
+                unhookHandle(handle)
             } catch (_: Throwable) {
             }
         }

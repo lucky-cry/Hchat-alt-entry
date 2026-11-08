@@ -10,8 +10,6 @@ import android.os.SystemClock
 import android.system.Os
 import android.widget.Toast
 import bsh.Interpreter
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers
 import dalvik.system.DexClassLoader
 import h.Hchat.BuildConfig
 import h.Hchat.dexkit.DexBridgeHolder
@@ -1688,9 +1686,10 @@ object ScriptPluginRuntime {
             set("dexFinder", currentBridge.dexKit?.holder()?.dexFinder)
             set("dexBridgeHolder", currentBridge.dexKit?.holder())
             set("WeChatApisClass", WeChatApis::class.java)
-            set("XposedBridgeClass", XposedBridge::class.java)
-            set("XposedHelpersClass", XposedHelpers::class.java)
-            set("XC_MethodHookClass", XC_MethodHook::class.java)
+            // API 102 下没有 legacy Xposed 类，脚本侧映射到模块自己的等价实现。
+            set("HookRegistryClass", h.Hchat.hooks.core.HookRegistry::class.java)
+            set("HookCallbackClass", h.Hchat.hooks.core.HookCallback::class.java)
+            set("KavaReflectorClass", h.Hchat.utils.KavaReflector::class.java)
             set("DexKitBridgeClass", DexKitBridge::class.java)
             set("DexFinderClass", DexFinder::class.java)
             set("DexBridgeHolderClass", DexBridgeHolder::class.java)
