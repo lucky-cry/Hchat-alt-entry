@@ -14,7 +14,8 @@ import android.view.ContextMenu
 import android.view.MenuItem
 import android.widget.Toast
 import h.Hchat.R
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -92,8 +93,8 @@ private class FinderMediaDownloadHooker(
     private fun hookCreateMenu(method: Method): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     findMenuObject(param.args)?.let { addMenuItems(it) }
                 }
             })
@@ -108,8 +109,8 @@ private class FinderMediaDownloadHooker(
     private fun hookClick(method: Method): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleMenuClick(param)
                 }
             })
@@ -258,7 +259,7 @@ private class FinderMediaDownloadHooker(
         return methods
     }
 
-    private fun handleMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleMenuClick(param: HookParam) {
         val item = param.args?.firstOrNull { it is MenuItem } as? MenuItem ?: return
         if (item.itemId != MENU_COPY_LINK && item.itemId != MENU_DOWNLOAD) return
         val media = findFinderMedia(param) ?: run {
@@ -320,7 +321,7 @@ private class FinderMediaDownloadHooker(
     }
 
     private fun findFinderMedia(
-        param: XC_MethodHook.MethodHookParam
+        param: HookParam
     ): FinderMediaDownloadSupport.FinderMedia? {
         param.args?.forEach { arg ->
             if (arg !is MenuItem) {

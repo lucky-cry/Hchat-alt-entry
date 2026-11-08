@@ -5,7 +5,6 @@ import android.content.Context;
 import java.util.ArrayList;
 import java.util.List;
 
-import de.robv.android.xposed.XposedBridge;
 
 import h.Hchat.dexkit.DexFinder;
 import h.Hchat.utils.HLog;
@@ -73,7 +72,7 @@ public class GiftHooker {
         if (important) {
             HLog.e(TAG + " " + message);
         } else if (settings != null && settings.getBoolean(GiftSettings.KEY_LOG_ENABLE, false)) {
-            XposedBridge.log(TAG + " " + message);
+            h.Hchat.utils.HLog.e(TAG + " " + message);
         }
     }
 }

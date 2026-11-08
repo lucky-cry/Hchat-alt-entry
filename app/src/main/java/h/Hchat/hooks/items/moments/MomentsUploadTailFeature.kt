@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.moments
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
@@ -69,8 +70,8 @@ private class MomentsUploadTailHooker(
         val sdkAppName = finder.snsSetSdkAppNameMethod ?: return false
         if (Modifier.isAbstract(commit.modifiers) || commit.declaringClass.isInterface) return false
         return runCatching {
-            HookRegistry.get().hook(commit, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(commit, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!prefs.getBoolean(
                             MomentsUploadTailSettings.KEY_ENABLE,
                             MomentsUploadTailSettings.DEFAULT_ENABLE

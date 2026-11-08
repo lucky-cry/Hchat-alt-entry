@@ -6,7 +6,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MenuItem
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -68,8 +69,8 @@ class MomentsContactFilterFeature : BaseFeature() {
             Bundle::class.java
         ) ?: return false
         return runCatching {
-            HookRegistry.get().hook(onCreate, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onCreate, object : HookCallback {
+                override fun after(param: HookParam) {
                     bindFilterMenu(param.thisObject as? Activity ?: return)
                 }
             })

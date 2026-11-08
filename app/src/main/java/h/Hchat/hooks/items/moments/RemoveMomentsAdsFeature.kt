@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.moments
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -56,8 +57,8 @@ class RemoveMomentsAdsFeature : BaseFeature() {
                     return
                 }
                 runCatching {
-                    HookRegistry.get().hook(constructor, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(constructor, object : HookCallback {
+                        override fun before(param: HookParam) {
                             if (!isEnabled(context)) return
                             param.result = null
                         }

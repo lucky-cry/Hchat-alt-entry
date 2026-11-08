@@ -25,7 +25,8 @@ import java.util.WeakHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * UI 抢包模式兜底。
@@ -112,26 +113,26 @@ public class RedPacketUiAutomator {
 
     private void hookReceiveLifecycle(Class<?> clazz, String className) {
         if (clazz == null) return;
-        if (hookDeclaredAfter(clazz, "initView", null, new XC_MethodHook() {
+        if (hookDeclaredAfter(clazz, "initView", null, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                handleReceivePage(param.thisObject, "initView", true);
+            public void after(HookParam param) {
+                handleReceivePage(param.getThisObject(), "initView", true);
             }
         })) {
             log("Hook领取页: " + className + ".initView");
         }
 
-        hookDeclaredAfter(clazz, "onCreate", new Class<?>[]{Bundle.class}, new XC_MethodHook() {
+        hookDeclaredAfter(clazz, "onCreate", new Class<?>[]{Bundle.class}, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                handleReceivePage(param.thisObject, "onCreate", false);
+            public void after(HookParam param) {
+                handleReceivePage(param.getThisObject(), "onCreate", false);
             }
         });
 
-        hookDeclaredAfter(clazz, "onResume", null, new XC_MethodHook() {
+        hookDeclaredAfter(clazz, "onResume", null, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                handleReceivePage(param.thisObject, "onResume", true);
+            public void after(HookParam param) {
+                handleReceivePage(param.getThisObject(), "onResume", true);
             }
         });
 
@@ -139,10 +140,10 @@ public class RedPacketUiAutomator {
             for (Method method : KavaReflector.declaredMethods(clazz)) {
                 if (!"onSceneEnd".equals(method.getName())) continue;
                 if (method.getParameterTypes().length != 4) continue;
-                HookRegistry.get().hook(method, new XC_MethodHook() {
+                HookRegistry.get().hook(method, new HookCallback() {
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        handleReceivePage(param.thisObject, "onSceneEnd", true);
+                    public void after(HookParam param) {
+                        handleReceivePage(param.getThisObject(), "onSceneEnd", true);
                     }
                 });
                 log("Hook领取页: " + className + ".onSceneEnd");
@@ -153,11 +154,11 @@ public class RedPacketUiAutomator {
         }
 
         try {
-            hookDeclaredAfter(clazz, "onDestroy", null, new XC_MethodHook() {
+            hookDeclaredAfter(clazz, "onDestroy", null, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject instanceof Activity) {
-                        clickedActivities.remove((Activity) param.thisObject);
+                public void after(HookParam param) {
+                    if (param.getThisObject() instanceof Activity) {
+                        clickedActivities.remove((Activity) param.getThisObject());
                     }
                 }
             });
@@ -194,21 +195,21 @@ public class RedPacketUiAutomator {
 
     private void hookDetailLifecycle(Class<?> clazz, String className) {
         if (clazz == null) return;
-        if (hookDeclaredAfter(clazz, "onCreate", new Class<?>[]{Bundle.class}, new XC_MethodHook() {
+        if (hookDeclaredAfter(clazz, "onCreate", new Class<?>[]{Bundle.class}, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                if (param.thisObject instanceof Activity) {
-                    scheduleDetailSuccessCheck((Activity) param.thisObject);
+            public void after(HookParam param) {
+                if (param.getThisObject() instanceof Activity) {
+                    scheduleDetailSuccessCheck((Activity) param.getThisObject());
                 }
             }
         })) {
             log("Hook详情页: " + className + ".onCreate");
         }
-        if (hookDeclaredAfter(clazz, "onResume", null, new XC_MethodHook() {
+        if (hookDeclaredAfter(clazz, "onResume", null, new HookCallback() {
             @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                if (param.thisObject instanceof Activity) {
-                    scheduleDetailSuccessCheck((Activity) param.thisObject);
+            public void after(HookParam param) {
+                if (param.getThisObject() instanceof Activity) {
+                    scheduleDetailSuccessCheck((Activity) param.getThisObject());
                 }
             }
         })) {
@@ -216,7 +217,7 @@ public class RedPacketUiAutomator {
         }
     }
 
-    private boolean hookDeclaredAfter(Class<?> clazz, String methodName, Class<?>[] parameterTypes, XC_MethodHook callback) {
+    private boolean hookDeclaredAfter(Class<?> clazz, String methodName, Class<?>[] parameterTypes, HookCallback callback) {
         try {
             Method method = parameterTypes == null
                     ? KavaReflector.findDeclaredMethod(clazz, methodName)

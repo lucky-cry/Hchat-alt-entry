@@ -7,7 +7,8 @@ import android.content.ContextWrapper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
@@ -93,8 +94,8 @@ private class FakeWalletBalanceHooker(
         if (methods.isEmpty()) return
         var hooked = 0
         methods.forEach { method ->
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val raw = param.args?.getOrNull(0) as? String
                     val view = param.thisObject as? View
                     if (enterAmountHook(view, raw)) return
@@ -111,7 +112,7 @@ private class FakeWalletBalanceHooker(
                     param.args?.set(0, rendered)
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     exitAmountHook()
                 }
             })
@@ -131,8 +132,8 @@ private class FakeWalletBalanceHooker(
         if (methods.isEmpty() && textSizeMethod == null) return
         var hooked = 0
         methods.forEach { method ->
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val raw = param.args?.getOrNull(0) as? String
                     val view = param.thisObject as? View
                     if (enterAmountHook(view, raw)) return
@@ -154,15 +155,15 @@ private class FakeWalletBalanceHooker(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     exitAmountHook()
                 }
             })
             hooked++
         }
         if (textSizeMethod != null) {
-            HookRegistry.get().hook(textSizeMethod, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(textSizeMethod, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     val target = targetForMoneyView(view) ?: AmountTarget.BALANCE
                     if (!isEnabled(target)) return
@@ -172,7 +173,7 @@ private class FakeWalletBalanceHooker(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     val target = targetForMoneyView(view) ?: AmountTarget.BALANCE
                     if (!isEnabled(target)) return
@@ -238,8 +239,8 @@ private class FakeWalletBalanceHooker(
         if (methods.isEmpty()) return
         var hooked = 0
         methods.forEach { method ->
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val args = param.args
                     val view = param.thisObject as? View
                     val raw = args?.getOrNull(3) as? String
@@ -258,7 +259,7 @@ private class FakeWalletBalanceHooker(
                     args[3] = rendered
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     exitAmountHook()
                 }
             })
@@ -273,8 +274,8 @@ private class FakeWalletBalanceHooker(
         if (methods.isEmpty()) return
         var hooked = 0
         methods.forEach { method ->
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (enterAmountHook(null, null)) return
                     if (!isEnabled(AmountTarget.LQT)) return
                     val actualCents = param.args?.getOrNull(1) as? Long ?: return
@@ -285,7 +286,7 @@ private class FakeWalletBalanceHooker(
                     param.args?.set(1, cents)
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     exitAmountHook()
                 }
             })

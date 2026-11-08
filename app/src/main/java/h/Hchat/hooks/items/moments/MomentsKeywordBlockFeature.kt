@@ -10,7 +10,8 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Adapter
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -261,8 +262,8 @@ private class MomentsKeywordBlockRuntime(
         if (snsTimelineQueryHookInstalled) return true
         val method = locateSnsTimelineQueryMethod() ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val sql = param.args.getOrNull(0) as? String ?: return
                     val rewritten = rewriteTimelineQuery(sql)
                     if (rewritten != sql) param.args[0] = rewritten
@@ -285,8 +286,8 @@ private class MomentsKeywordBlockRuntime(
             return true
         }
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.args.getOrNull(3) as? View
                     if (!filterSnapshot.isActive(filterByAuthor = true)) {
                         view?.let(::clearViewBinding)
@@ -302,7 +303,7 @@ private class MomentsKeywordBlockRuntime(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val view = param.result as? View ?: return
                     if (!filterSnapshot.isActive(filterByAuthor = true)) {
                         clearViewBinding(view)
@@ -328,8 +329,8 @@ private class MomentsKeywordBlockRuntime(
         if (improveTimelineHookInstalled) return true
         val method = locateImproveTimelineBindMethod() ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.thisObject as? View
                     if (!filterSnapshot.isActive(filterByAuthor = true)) {
                         view?.let(::clearViewBinding)
@@ -345,7 +346,7 @@ private class MomentsKeywordBlockRuntime(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     if (!filterSnapshot.isActive(filterByAuthor = true)) {
                         clearViewBinding(view)
@@ -373,8 +374,8 @@ private class MomentsKeywordBlockRuntime(
         if (profileListHookInstalled) return true
         val method = locateProfileListBindMethod() ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.args.getOrNull(1) as? View
                     if (!filterSnapshot.isActive(filterByAuthor = false)) {
                         view?.let(::clearViewBinding)
@@ -390,7 +391,7 @@ private class MomentsKeywordBlockRuntime(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val view = param.result as? View ?: return
                     if (!filterSnapshot.isActive(filterByAuthor = false)) {
                         clearViewBinding(view)
@@ -420,8 +421,8 @@ private class MomentsKeywordBlockRuntime(
         }
         val method = locateFlutterProfileSwitchMethod() ?: return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (activeKeywords().isNotEmpty()) param.result = false
                 }
             })
@@ -655,7 +656,7 @@ private class MomentsKeywordBlockRuntime(
         )
     }
 
-    private fun profileListInfo(param: XC_MethodHook.MethodHookParam): Any? {
+    private fun profileListInfo(param: HookParam): Any? {
         val adapter = param.thisObject as? Adapter ?: return null
         val position = (param.args.getOrNull(0) as? Number)?.toInt() ?: return null
         return runCatching { adapter.getItem(position) }.getOrNull()

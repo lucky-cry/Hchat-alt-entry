@@ -13,7 +13,8 @@ import h.Hchat.hooks.api.model.WeChatMessage
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.utils.KavaReflector
 import h.Hchat.utils.HLog
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.preferences.HchatStorage
 import java.io.File
 import java.lang.reflect.Method
@@ -124,8 +125,8 @@ internal class LinkParseRuntime(private val context: FeatureContext) {
             return false
         }
         if (cached == null) DexMethodCache.save(methodPrefs, runtimeKey, CACHE_MESSAGE_WRITE, method)
-        HookRegistry.get().hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        HookRegistry.get().hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 if (stopped) return
                 runCatching {
                     LinkParseWriteGate.capture(settings.enabled(), param.args)?.let {
@@ -134,8 +135,8 @@ internal class LinkParseRuntime(private val context: FeatureContext) {
                 }.onFailure { HLog.e("[Hchat:LinkParse] 消息写入捕获失败", it) }
             }
 
-            override fun afterHookedMethod(param: MethodHookParam) {
-                if (param.hasThrowable() || stopped) return
+            override fun after(param: HookParam) {
+                if (param.hasThrowable || stopped) return
                 runCatching {
                     val capture = param.getObjectExtra(WRITE_CAPTURE_KEY) as? LinkParseWriteGate.Capture ?: return
                     LinkParseWriteGate.observe(

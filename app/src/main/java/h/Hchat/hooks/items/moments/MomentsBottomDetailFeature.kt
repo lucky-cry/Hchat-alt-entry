@@ -2,7 +2,8 @@ package h.Hchat.hooks.items.moments
 
 import android.content.Context
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.sns.SnsContentTypes
@@ -116,8 +117,8 @@ private class MomentsBottomDetailRuntime(
         if (timeHookInstalled) return true
         val timeMethod = locateTimeMethod() ?: return false
         return runCatching {
-            HookRegistry.get().hook(timeMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(timeMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!MomentsBottomDetailFeature.isEnabled(context.hostContext())) return
                     val original = param.result as? String ?: return
                     param.result = formatDetails(param.thisObject, original)
@@ -137,8 +138,8 @@ private class MomentsBottomDetailRuntime(
         val owner = locateTimeMethod()?.declaringClass ?: return false
         val groupMethod = locateGroupMethod(owner) ?: return false
         return runCatching {
-            HookRegistry.get().hook(groupMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(groupMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!MomentsBottomDetailFeature.isEnabled(context.hostContext())) return
                     if (prefs.getBoolean(
                             MomentsBottomDetailSettings.KEY_HIDE_GROUP_ICON,
@@ -163,8 +164,8 @@ private class MomentsBottomDetailRuntime(
         val formatterMethod = locateProfileFormatterMethod() ?: return false
         val itemMethod = locateProfileItemMethod(formatterMethod.declaringClass) ?: return false
         return runCatching {
-            HookRegistry.get().hook(itemMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(itemMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!MomentsBottomDetailFeature.isEnabled(context.hostContext())) return
                     val adapter = param.thisObject ?: return
                     val info = param.result ?: return
@@ -179,8 +180,8 @@ private class MomentsBottomDetailRuntime(
                     }
                 }
             })
-            HookRegistry.get().hook(formatterMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(formatterMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!MomentsBottomDetailFeature.isEnabled(context.hostContext())) return
                     val adapter = param.thisObject ?: return
                     val createTime = (param.args.getOrNull(2) as? Number)?.toLong() ?: return
@@ -194,8 +195,8 @@ private class MomentsBottomDetailRuntime(
                 }
             })
             locateFlutterProfileSwitchMethod()?.let { method ->
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (MomentsBottomDetailFeature.isEnabled(context.hostContext())) {
                             param.result = false
                         }

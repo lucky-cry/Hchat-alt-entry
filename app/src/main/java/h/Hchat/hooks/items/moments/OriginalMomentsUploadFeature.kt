@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.moments
 
 import android.content.Intent
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -69,13 +70,13 @@ private class OriginalMomentsUploadHooker(
         if (!imagePreviewInstalled) {
             locateImagePreviewSendMethod(allowDexSearch)?.let { method ->
                 try {
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             if (!isEnabled()) return
                             patchGalleryTimelineArgs(param.args)
                         }
 
-                        override fun afterHookedMethod(param: MethodHookParam) {
+                        override fun after(param: HookParam) {
                             if (!isEnabled()) return
                             patchGalleryResultIntent(param.args)
                         }
@@ -89,8 +90,8 @@ private class OriginalMomentsUploadHooker(
         if (!createPicInstalled) {
             locateSnsCreatePicMethod(allowDexSearch)?.let { method ->
                 try {
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             if (!isEnabled()) return
                             bypassImageReencode(param)
                         }
@@ -120,7 +121,7 @@ private class OriginalMomentsUploadHooker(
         intent.putExtra("key_delete_origin_file", false)
     }
 
-    private fun bypassImageReencode(param: XC_MethodHook.MethodHookParam) {
+    private fun bypassImageReencode(param: HookParam) {
         val args = param.args ?: return
         if (args.size < 3) return
         val dir = args[0] as? String ?: return

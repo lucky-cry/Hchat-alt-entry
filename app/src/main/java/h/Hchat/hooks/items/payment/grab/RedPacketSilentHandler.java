@@ -21,7 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * 静默抢红包链路。
@@ -282,15 +283,15 @@ public class RedPacketSilentHandler {
             }
             if (onGYNetEnd == null) return false;
 
-            HookRegistry.get().hook(onGYNetEnd, new XC_MethodHook() {
+            HookRegistry.get().hook(onGYNetEnd, new HookCallback() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
+                public void before(HookParam param) {
                     if (!settings.isEnabled()) return;
                     try {
-                        Object jsonObj = param.args != null && param.args.length > 2 ? param.args[2] : null;
-                        Map<String, Object> info = state.silentReceiveRequestInfoMap.get(param.thisObject);
+                        Object jsonObj = param.getArgs() != null && param.getArgs().length > 2 ? param.getArgs()[2] : null;
+                        Map<String, Object> info = state.silentReceiveRequestInfoMap.get(param.getThisObject());
                         boolean unionCallback = dexFinder.receiveLuckyMoneyUnionClass != null
-                                && dexFinder.receiveLuckyMoneyUnionClass.isAssignableFrom(param.thisObject.getClass());
+                                && dexFinder.receiveLuckyMoneyUnionClass.isAssignableFrom(param.getThisObject().getClass());
                         String callbackSendId = RedPacketReflector.readJsonString(jsonObj, "sendId");
                         if (TextUtils.isEmpty(callbackSendId)) {
                             callbackSendId = RedPacketReflector.readJsonString(jsonObj, "sendid");
@@ -304,9 +305,9 @@ public class RedPacketSilentHandler {
                         if (TextUtils.isEmpty(sendId) || !state.silentReceivingSet.contains(sendId)) return;
 
                         if (jsonObj == null || !matchesRequestSendId(jsonObj, sendId)) return;
-                        if (param.args[0] instanceof Number && ((Number) param.args[0]).intValue() != 0) {
+                        if (param.getArgs()[0] instanceof Number && ((Number) param.getArgs()[0]).intValue() != 0) {
                             HLog.e("[Hchat:RedPacket] 收红包响应失败: sendid=" + sendId
-                                    + " errorCode=" + param.args[0]);
+                                    + " errorCode=" + param.getArgs()[0]);
                             return;
                         }
 
@@ -314,7 +315,7 @@ public class RedPacketSilentHandler {
                         log("收红包响应: sendid=" + sendId + " timingId=" + timingIdentifier);
                         if (TextUtils.isEmpty(timingIdentifier)) return;
 
-                        Map<String, Object> ownedInfo = state.silentReceiveRequestInfoMap.remove(param.thisObject);
+                        Map<String, Object> ownedInfo = state.silentReceiveRequestInfoMap.remove(param.getThisObject());
                         if (ownedInfo != null && ownedInfo != info) return;
                         if (!state.silentOpeningSet.add(sendId)) return;
                         state.silentReceivingSet.remove(sendId);
@@ -437,15 +438,15 @@ public class RedPacketSilentHandler {
             }
             if (onGYNetEnd == null) return false;
 
-            HookRegistry.get().hook(onGYNetEnd, new XC_MethodHook() {
+            HookRegistry.get().hook(onGYNetEnd, new HookCallback() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                public void after(HookParam param) {
                     if (!settings.isEnabled()) return;
                     try {
-                        String sendId = state.silentOpenRequestSendIdMap.get(param.thisObject);
+                        String sendId = state.silentOpenRequestSendIdMap.get(param.getThisObject());
                         boolean unionCallback = dexFinder.openLuckyMoneyUnionClass != null
-                                && dexFinder.openLuckyMoneyUnionClass.isAssignableFrom(param.thisObject.getClass());
-                        Object jsonObj = (param.args != null && param.args.length > 2) ? param.args[2] : null;
+                                && dexFinder.openLuckyMoneyUnionClass.isAssignableFrom(param.getThisObject().getClass());
+                        Object jsonObj = (param.getArgs() != null && param.getArgs().length > 2) ? param.getArgs()[2] : null;
                         if (TextUtils.isEmpty(sendId)) {
                             if (!unionCallback) return;
                             sendId = RedPacketReflector.readJsonString(jsonObj, "sendId");
@@ -458,14 +459,14 @@ public class RedPacketSilentHandler {
                         }
                         if (TextUtils.isEmpty(sendId) || !state.silentOpeningSet.contains(sendId)) return;
                         if (!matchesRequestSendId(jsonObj, sendId)) return;
-                        String ownedSendId = state.silentOpenRequestSendIdMap.remove(param.thisObject);
+                        String ownedSendId = state.silentOpenRequestSendIdMap.remove(param.getThisObject());
                         if (ownedSendId != null && !sendId.equals(ownedSendId)) return;
                         cancelTask(openTimeoutKey(sendId));
 
                         int errCode = 0;
                         try {
-                            if (param.args != null && param.args.length > 0 && param.args[0] instanceof Number) {
-                                errCode = ((Number) param.args[0]).intValue();
+                            if (param.getArgs() != null && param.getArgs().length > 0 && param.getArgs()[0] instanceof Number) {
+                                errCode = ((Number) param.getArgs()[0]).intValue();
                             }
                         } catch (Throwable ignored) {}
 

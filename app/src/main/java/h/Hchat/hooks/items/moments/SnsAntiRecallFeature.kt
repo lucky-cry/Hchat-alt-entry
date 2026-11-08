@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.moments
 import android.content.ContentValues
 import android.content.SharedPreferences
 import android.database.Cursor
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
@@ -84,8 +85,8 @@ private class SnsAntiRecallHooker(
         for (method in KavaReflector.declaredMethods(dbClass)) {
             if (!isSnsWriteMethod(method) && !isSnsRawQueryMethod(method)) continue
             if (!hookedMethods.add(method)) continue
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     try {
                         if (isSnsWriteMethod(method)) {
                             handleSnsWrite(param.thisObject, param.args, isSnsUpdateMethod(method))
@@ -191,8 +192,8 @@ private class SnsAntiRecallHooker(
         val method = findEnableFlutterSnsPageMethod() ?: return 0
         if (!hookedMethods.add(method)) return 0
         return try {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (isMomentAntiRecallEnabled() && isForceLegacyProfileEnabled()) {
                         param.result = false
                     }

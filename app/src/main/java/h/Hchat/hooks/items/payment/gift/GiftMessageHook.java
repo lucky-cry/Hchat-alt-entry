@@ -10,7 +10,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 import h.Hchat.dexkit.DexFinder;
 import h.Hchat.hooks.core.HookRegistry;
@@ -54,10 +55,10 @@ public class GiftMessageHook {
                 }
                 if (indexes.isEmpty()) continue;
 
-                XC_MethodHook.Unhook unhook = HookRegistry.get().hook(method, new XC_MethodHook() {
+                Object unhook = HookRegistry.get().hook(method, new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        Object[] args = param.args;
+                    public void before(HookParam param) {
+                        Object[] args = param.getArgs();
                         if (args == null) return;
                         for (Integer index : indexes) {
                             if (index == null || index >= args.length) continue;

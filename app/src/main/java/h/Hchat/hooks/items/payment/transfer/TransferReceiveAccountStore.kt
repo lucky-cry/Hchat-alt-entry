@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.payment.transfer
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
@@ -49,8 +50,8 @@ object TransferReceiveAccountStore {
                 DexMethodCache.save(prefs, cacheKey, "receive_account_parser", it)
             }
             ?: return false
-        HookRegistry.get().hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        HookRegistry.get().hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 val json = param.args.firstOrNull() as? JSONObject ?: return
                 captureItem(context.hostContext(), json)
             }

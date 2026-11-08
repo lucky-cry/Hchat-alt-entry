@@ -11,7 +11,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 
 /**
  * AddMsg 消息预监听。
@@ -73,13 +74,13 @@ public class RedPacketMessageHook {
                 }
                 if (addMsgArgIndexes.isEmpty()) continue;
 
-                HookRegistry.get().hook(method, new XC_MethodHook() {
+                HookRegistry.get().hook(method, new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args == null) return;
+                    public void before(HookParam param) {
+                        if (param.getArgs() == null) return;
                         for (int index : addMsgArgIndexes) {
-                            if (index >= 0 && index < param.args.length && param.args[index] != null) {
-                                handleAddMsgBeforeDb(param.args[index]);
+                            if (index >= 0 && index < param.getArgs().length && param.getArgs()[index] != null) {
+                                handleAddMsgBeforeDb(param.getArgs()[index]);
                             }
                         }
                     }
