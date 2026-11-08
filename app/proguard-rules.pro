@@ -75,3 +75,13 @@
     java.lang.String m;
     java.lang.String d;
 }
+
+# libxposed API 102 入口：java_init.list 按类名加载，必须保留原名与构造器
+-keep class h.Hchat.libxposed.HchatModule { *; }
+-keepnames class h.Hchat.libxposed.**
+-keep class h.Hchat.HostEnv { *; }
+-keep class h.Hchat.ModuleEntry { *; }
+-keep class h.Hchat.hooks.core.HookCallback { *; }
+-keep class h.Hchat.hooks.core.HookParam { *; }
+-keep class h.Hchat.hooks.core.HookEngine { *; }
+-keep class h.Hchat.hooks.core.LibxposedHookEngine { *; }
