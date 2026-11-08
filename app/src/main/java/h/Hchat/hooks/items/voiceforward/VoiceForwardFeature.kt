@@ -325,7 +325,7 @@ private class VoiceForwardHooker(
             .forEach { queryMethod ->
                 if (hookMethod(queryMethod, object : HookCallback {
                         override fun before(param: HookParam) {
-                            removeVoiceFromFavoriteAdapter(param.thisObject)
+                            removeVoiceFromFavoriteAdapter(param.thisObject ?: return)
                         }
                     })) {
                     hooked++
@@ -339,7 +339,7 @@ private class VoiceForwardHooker(
             }
             if (resetMethod != null && hookMethod(resetMethod, object : HookCallback {
                     override fun before(param: HookParam) {
-                        removeVoiceFromFavoriteAdapter(param.thisObject)
+                        removeVoiceFromFavoriteAdapter(param.thisObject ?: return)
                     }
                 })) {
                 hooked++
