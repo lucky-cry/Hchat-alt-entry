@@ -1,7 +1,12 @@
 package h.Hchat.utils
 
+import android.content.ContentValues
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.BufferedInputStream
@@ -311,4 +316,54 @@ object HchatMediaDownloader {
             }
         }
     }
+
+    /**
+     * 把已下载的文件发布到系统相册（DCIM/Hchat）。
+     * Android 10+ 走 MediaStore，旧版本直接复制到公共目录并通知扫描。
+     */
+    @JvmStatic
+    fun publishToGallery(context: Context, file: File, mime: String): Boolean {
+        if (!file.isFile || file.length() <= 0L) return false
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Hchat")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val collection = if (mime.startsWith("video")) {
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                } else {
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                }
+                val uri = resolver.insert(collection, values) ?: return false
+                resolver.openOutputStream(uri)?.use { output ->
+                    file.inputStream().use { input -> input.copyTo(output) }
+                }
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                true
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                    "Hchat"
+                )
+                dir.mkdirs()
+                val target = File(dir, file.name)
+                file.copyTo(target, overwrite = true)
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(target.absolutePath),
+                    arrayOf(mime),
+                    null
+                )
+                true
+            }
+        }.getOrDefault(false)
+    }
+
 }

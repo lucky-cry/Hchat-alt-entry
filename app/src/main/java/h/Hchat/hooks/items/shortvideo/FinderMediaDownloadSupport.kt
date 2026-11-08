@@ -361,8 +361,10 @@ internal object FinderMediaDownloadSupport {
             "finder_image_${System.currentTimeMillis()}_${mediaIndex + 1}",
             extensionFromUrl(url, "png")
         )
-        return HchatMediaDownloader.downloadFinderImage(context, url, target)
+        val saved = HchatMediaDownloader.downloadFinderImage(context, url, target)
             ?.takeIf { it.isFile && it.length() > 0L }
+        saved?.let { runCatching { HchatMediaDownloader.publishToGallery(context, it, "image/jpeg") } }
+        return saved
     }
 
     private fun downloadVideo(
@@ -390,7 +392,9 @@ internal object FinderMediaDownloadSupport {
             else ->
                 HchatMediaDownloader.downloadFinderVideo(context, fullUrl(json), target)
         }
-        return validateFinderVideo(file)
+        val saved = validateFinderVideo(file)
+        saved?.let { runCatching { HchatMediaDownloader.publishToGallery(context, it, "video/mp4") } }
+        return saved
     }
 
     private fun validateFinderVideo(file: File?): File? {
