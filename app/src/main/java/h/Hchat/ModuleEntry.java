@@ -279,7 +279,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
             new Thread(() -> {
                 DexInstallScheduler.runDexKitTask(() -> {
                     try {
-                        ClassLoader hostClassLoader = resolveTinkerClassLoader(param.thisObject);
+                        ClassLoader hostClassLoader = resolveTinkerClassLoader(param.getThisObject());
                         if (hostClassLoader == null) {
                             hostClassLoader = resolveHostClassLoader(context, lpparam);
                         }
@@ -363,7 +363,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
             Context context = (Context) param.getArgs()[0];
             if (!TermsGate.INSTANCE.isAccepted(context)) return;
             if (!WeChatTabletFeature.isEnabled(context)) return;
-            ClassLoader resolvedClassLoader = resolveTinkerClassLoader(param.thisObject);
+            ClassLoader resolvedClassLoader = resolveTinkerClassLoader(param.getThisObject());
             if (resolvedClassLoader == null) {
                 resolvedClassLoader = resolveHostClassLoader(context, lpparam);
             }
