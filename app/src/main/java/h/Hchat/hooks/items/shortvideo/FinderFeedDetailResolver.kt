@@ -40,13 +40,20 @@ internal class FinderFeedDetailResolver private constructor(
             HLog.e("$TAG 视频号 objectId 无效: $objectId")
             return null
         }
-        val scene = KavaReflector.newInstance(
-            requestConstructor,
-            feedId,
-            objectNonceId,
-            commentScene.takeIf { it > 0 } ?: DEFAULT_COMMENT_SCENE,
-            System.identityHashCode(this)
-        ) ?: run {
+        val requestScene = commentScene.takeIf { it > 0 } ?: DEFAULT_COMMENT_SCENE
+        val scene = runCatching {
+            val args = buildRequestArgs(
+                requestConstructor,
+                feedId,
+                objectNonceId,
+                requestScene,
+                System.identityHashCode(this)
+            )
+            KavaReflector.newInstance(requestConstructor, *args)
+        }.onFailure {
+            HLog.e("$TAG 构造视频号详情请求异常: ${it.message} 参数=" +
+                requestConstructor.parameterTypes.joinToString { type -> type.name }, it)
+        }.getOrNull() ?: run {
             HLog.e("$TAG 创建视频号详情请求失败: objectId=$objectId")
             return null
         }
@@ -159,14 +166,44 @@ internal class FinderFeedDetailResolver private constructor(
         }
 
         private fun isRequestConstructor(constructor: Constructor<*>): Boolean {
-            return constructor.parameterTypes.contentEquals(
-                arrayOf(
-                    java.lang.Long.TYPE,
-                    String::class.java,
-                    java.lang.Integer.TYPE,
-                    java.lang.Integer.TYPE
-                )
-            )
+            // 8.0.80 起该请求构造器带了大量 Kotlin 默认参数，前四个仍是
+            // (long objectId, String objectNonceId, int scene, int identity)。
+            val types = constructor.parameterTypes
+            if (types.size < 4) return false
+            return types[0] == java.lang.Long.TYPE &&
+                types[1] == String::class.java &&
+                types[2] == java.lang.Integer.TYPE &&
+                types[3] == java.lang.Integer.TYPE
+        }
+
+        /** 为超出前四个的默认参数补零值/空串，对象参数给 null（由 try/catch 兜住）。 */
+        private fun buildRequestArgs(
+            constructor: Constructor<*>,
+            feedId: Long,
+            objectNonceId: String,
+            scene: Int,
+            identity: Int
+        ): Array<Any?> {
+            val params = constructor.parameterTypes
+            val args = arrayOfNulls<Any?>(params.size)
+            args[0] = feedId
+            args[1] = objectNonceId
+            args[2] = scene
+            args[3] = identity
+            for (index in 4 until params.size) {
+                args[index] = when (params[index]) {
+                    java.lang.Boolean.TYPE -> false
+                    java.lang.Integer.TYPE -> 0
+                    java.lang.Long.TYPE -> 0L
+                    java.lang.Short.TYPE -> 0.toShort()
+                    java.lang.Byte.TYPE -> 0.toByte()
+                    java.lang.Float.TYPE -> 0f
+                    java.lang.Double.TYPE -> 0.0
+                    String::class.java -> ""
+                    else -> null
+                }
+            }
+            return args
         }
 
         private fun isCallbackMethod(method: Method, owner: Class<*>): Boolean {

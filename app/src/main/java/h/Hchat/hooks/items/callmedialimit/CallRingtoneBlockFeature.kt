@@ -163,7 +163,8 @@ private class CallRingtoneBlockHooker(
 
 
     /**
-     * 8.0.80 兼容兜底：用「铃声启动」日志锚点定位类，再在类里找唯一的 (Z)->V 入口。
+     * 8.0.80 兼容兜底：改用 findMethod 反查「使用铃声锚点的方法」的宿主类，
+     * 再在类内找 (Z)->V 方向方法（该类应同时具备 (Z,I)->V 路由方法）。
      * 旧锚点 requestAudioDeviceToStartRing 系列在 8.0.80 已不存在。
      */
     private fun locateMultiTalkDirectionMethodsByClassAnchor(): List<Method> {
@@ -173,19 +174,35 @@ private class CallRingtoneBlockHooker(
         )
         val result = LinkedHashSet<Method>()
         for (anchor in anchors) {
-            val classes = runCatching {
-                context.dexKitBridge().findClass(
-                    FindClass().apply {
-                        matcher(ClassMatcher().apply { usingStrings(listOf(anchor)) })
+            val found = runCatching {
+                context.dexKitBridge().findMethod(
+                    FindMethod().apply {
+                        matcher(MethodMatcher().apply { usingEqStrings(anchor) })
                     }
                 )
-            }.getOrElse { emptyList() }
-            for (cd in classes) {
-                val cl = runCatching {
-                    KavaReflector.loadClass(cd.name, context.hostClassLoader())
-                }.getOrNull() ?: continue
-                val direction = KavaReflector.declaredMethods(cl).filter(::isMultiTalkDirectionMethod)
-                if (direction.size == 1) result.add(direction.first())
+            }.getOrElse {
+                logger("铃声兜底: 查询锚点失败 $anchor", it)
+                emptyList()
+            }
+            logger("铃声兜底: 锚点 [$anchor] 命中方法 ${found.size}", null)
+            val owners = LinkedHashSet<Class<*>>()
+            for (data in found) {
+                runCatching {
+                    data.getMethodInstance(context.hostClassLoader()).declaringClass
+                }.getOrNull()?.let { owners.add(it) }
+            }
+            for (cl in owners) {
+                val declared = KavaReflector.declaredMethods(cl)
+                val direction = declared.filter(::isMultiTalkDirectionMethod)
+                val hasRoute = declared.any { method ->
+                    val types = method.parameterTypes
+                    types.size == 2 &&
+                        types[0] == java.lang.Boolean.TYPE &&
+                        types[1] == java.lang.Integer.TYPE &&
+                        method.returnType == Void.TYPE
+                }
+                logger("铃声兜底: 类 ${cl.name} 方向=${direction.size} 路由=$hasRoute", null)
+                if (direction.size == 1 && hasRoute) result.add(direction.first())
             }
             if (result.isNotEmpty()) break
         }
