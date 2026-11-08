@@ -144,8 +144,15 @@ public final class WeChatDatabaseListenerApi {
     }
 
     public synchronized void install() {
-        if (!isAvailable()) return;
         Class<?> wrapperClass = dexFinder != null ? dexFinder.sqliteDbWrapperClass : null;
+        // 诊断日志：微信升级后用来区分「wrapper 类没解析到」与「类在但钩子没装上」。
+        log("install 诊断: available=" + isAvailable()
+                + " classLoader=" + (classLoader != null ? classLoader.getClass().getName() : "null")
+                + " dexFinder=" + (dexFinder != null)
+                + " wrapper=" + (wrapperClass != null ? wrapperClass.getName() : "null")
+                + " operational=" + isOperational()
+                + " hooked=" + hookedMethodCount);
+        if (!isAvailable()) return;
         if (isOperational()) return;
         if (wrapperClass != hookedWrapperClass) {
             hookedWrapperMutationMethods.clear();

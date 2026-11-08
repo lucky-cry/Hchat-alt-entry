@@ -2621,6 +2621,12 @@ public class DexFinder {
             sqliteDbWrapperClass = findFirstClassByStrings(
                     "MicroMsg.SqliteDB",
                     "sql is null ");
+            if (sqliteDbWrapperClass == null) {
+                // 双锚点未命中时退回单锚点，再用变更方法签名筛选，避免新版微信把两条日志拆到不同类。
+                sqliteDbWrapperClass = findSqliteWrapperBySingleAnchor();
+            }
+            h.Hchat.utils.HLog.e(TAG + " 数据库API解析: sqlite="
+                    + (sqliteDbWrapperClass != null ? sqliteDbWrapperClass.getName() : "null"));
 
             logDetail("数据库API: kernel="
                     + (mmKernelClass != null ? mmKernelClass.getName() : "null")
@@ -5219,6 +5225,52 @@ public class DexFinder {
                 if (!out.isEmpty()) return;
             } catch (Throwable ignored) {}
         }
+    }
+
+
+    /**
+     * 单锚点兜底：找同时具备 SQLite 变更方法形状的类。
+     * 只在双锚点查询失败时使用，避免误命中其它只打日志的类。
+     */
+    private Class<?> findSqliteWrapperBySingleAnchor() {
+        try {
+            java.util.List<ClassData> classes = dexKit.findClass(
+                    mkClassUsingStrings("MicroMsg.SqliteDB"));
+            for (ClassData cd : classes) {
+                Class<?> cl;
+                try {
+                    cl = KavaReflector.loadClass(cd.getName(), classLoader);
+                } catch (Throwable ignored) {
+                    continue;
+                }
+                if (hasSqliteMutationShape(cl)) return cl;
+            }
+        } catch (Throwable e) {
+            h.Hchat.utils.HLog.e(TAG + " 单锚点定位 sqlite wrapper 失败: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
+    private boolean hasSqliteMutationShape(Class<?> cl) {
+        Class<?> cur = cl;
+        while (cur != null && cur != Object.class) {
+            for (Method m : KavaReflector.declaredMethods(cur)) {
+                Class<?>[] params = m.getParameterTypes();
+                Class<?> ret = m.getReturnType();
+                if (ret == long.class && params.length == 3
+                        && params[0] == String.class && params[1] == String.class
+                        && android.content.ContentValues.class.isAssignableFrom(params[2])) {
+                    return true;
+                }
+                if (ret == int.class && params.length == 3
+                        && params[0] == String.class && params[1] == String.class
+                        && params[2] == String[].class) {
+                    return true;
+                }
+            }
+            cur = cur.getSuperclass();
+        }
+        return false;
     }
 
     private Class<?> findFirstClassByStrings(String... strings) {
