@@ -201,7 +201,7 @@ internal object ConversationGroupHomeProjection {
             hook(root, object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     if (!isActive(installation)) return
-                    if ((legacyDepth.get() ?: 0) <= 0 || param.hasThrowable()) return
+                    if ((legacyDepth.get() ?: 0) <= 0 || param.hasThrowable) return
                     val scope = queryScopes.get()?.lastOrNull()?.takeIf { it.installation == installation } ?: return
                     synchronized(lifecycleLock) {
                         if (!isActive(installation)) return
@@ -249,7 +249,7 @@ internal object ConversationGroupHomeProjection {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     try {
                     if (!isActive(installation)) return
-                    if (param.hasThrowable()) return
+                    if (param.hasThrowable) return
                     updates.firstOrNull { it.declaringClass.isInstance(param.thisObject) }
                         ?.let { captureRefresh(installation, param.thisObject, Refresh(it)) }
                     val hidden = if (hasTabFilterInQuery()) emptySet() else hiddenIds()
@@ -306,7 +306,7 @@ internal object ConversationGroupHomeProjection {
             }
             override fun afterHookedMethod(param: MethodHookParam) {
                 if (!isActive(installation)) return
-                if (tabFilter()?.active != true || param.hasThrowable()) return
+                if (tabFilter()?.active != true || param.hasThrowable) return
                 // Native incremental updates may reject folded children before the visibility test.
                 // Reload at most once per burst; never recursively refresh our own type-5 reset.
                 val type = param.args.getOrNull(update.parameterTypes.size - 2) as? Int

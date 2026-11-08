@@ -135,7 +135,7 @@ internal class LinkParseRuntime(private val context: FeatureContext) {
             }
 
             override fun afterHookedMethod(param: MethodHookParam) {
-                if (param.hasThrowable() || stopped) return
+                if (param.hasThrowable || stopped) return
                 runCatching {
                     val capture = param.getObjectExtra(WRITE_CAPTURE_KEY) as? LinkParseWriteGate.Capture ?: return
                     LinkParseWriteGate.observe(

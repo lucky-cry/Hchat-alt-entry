@@ -58,7 +58,7 @@ class LegacyHookEngine : HookEngine {
                 param.result = value
             }
 
-        override val hasThrowable: Boolean get() = param.hasThrowable()
+        override val hasThrowable: Boolean get() = param.hasThrowable
         override var throwable: Throwable?
             get() = param.throwable
             set(value) {

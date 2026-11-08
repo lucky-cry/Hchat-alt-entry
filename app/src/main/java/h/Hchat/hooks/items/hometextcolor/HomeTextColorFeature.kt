@@ -355,7 +355,7 @@ private class HomeTextColorRuntime(
                 }
 
                 override fun after(param: HookParam) {
-                    if (destroyed || param.hasThrowable()) return
+                    if (destroyed || param.hasThrowable) return
                     val row = param.result as? View ?: return
                     if (row !== param.args?.getOrNull(1)) restoreRow(row)
                     applyBoundRow(row, kind)
@@ -389,7 +389,7 @@ private class HomeTextColorRuntime(
                     methods.holder,
                     object : HookCallback {
                         override fun after(param: HookParam) {
-                            if (destroyed || param.hasThrowable()) return
+                            if (destroyed || param.hasThrowable) return
                             val holder = param.args?.getOrNull(0) ?: return
                             val row = param.args?.getOrNull(1) as? View ?: return
                             modernConversationRows[holder] = WeakReference(row)
@@ -419,7 +419,7 @@ private class HomeTextColorRuntime(
                         }
 
                         override fun after(param: HookParam) {
-                            if (destroyed || param.hasThrowable()) return
+                            if (destroyed || param.hasThrowable) return
                             val holder = param.args?.getOrNull(1) ?: return
                             val row = modernConversationRows[holder]?.get() ?: return
                             applyBoundRow(row, RowKind.CONVERSATION)
@@ -601,7 +601,7 @@ private class HomeTextColorRuntime(
         return runCatching {
             HookRegistry.get().hook(method, object : HookCallback {
                 override fun after(param: HookParam) {
-                    if (destroyed || param.hasThrowable()) return
+                    if (destroyed || param.hasThrowable) return
                     val view = param.result as? View ?: return
                     if (viewAnchor(view) !in FIXED_CONTACT_ENTRY_ANCHORS) return
                     val creationContext = param.args?.getOrNull(1) as? Context
@@ -766,7 +766,7 @@ private class HomeTextColorRuntime(
                 }
 
                 override fun after(param: HookParam) {
-                    if (destroyed || param.hasThrowable()) return
+                    if (destroyed || param.hasThrowable) return
                     val root = findRootView(param.args?.getOrNull(0)) ?: return
                     val kind = resolveRecyclerRowKind(root) ?: run {
                         trackedRows.remove(root)

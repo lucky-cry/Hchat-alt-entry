@@ -222,7 +222,7 @@ internal class ConversationGroupFileResultHooks(
                             val result = param.args.getOrNull(1) as? Int ?: Activity.RESULT_CANCELED
                             synchronized(this@ConversationGroupFileResultHooks) {
                                 if (generation == installingGeneration) {
-                                    if (param.hasThrowable() && onHostFailure != null) {
+                                    if (param.hasThrowable && onHostFailure != null) {
                                         runCatching { onHostFailure(owner, code) }
                                             .onFailure { HLog.e("[Hchat:ConversationGroup] 取消失败的文件结果请求异常", it) }
                                     } else {

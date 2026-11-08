@@ -57,7 +57,7 @@ internal class ForwardedRecordTypeLabels(
                 }
 
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    if (destroyed || param.hasThrowable() || Looper.myLooper() != Looper.getMainLooper()) return
+                    if (destroyed || param.hasThrowable || Looper.myLooper() != Looper.getMainLooper()) return
                     val row = param.result as? View ?: return
                     clearRow(row)
                     val activity = activity(row.context) ?: return
