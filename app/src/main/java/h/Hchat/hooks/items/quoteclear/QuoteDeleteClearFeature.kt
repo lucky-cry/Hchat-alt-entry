@@ -6,7 +6,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -87,8 +88,8 @@ private class QuoteDeleteClearRuntime(
         val onAttached = KavaReflector.findMethodRecursive(footerClass, "onAttachedToWindow") ?: return false
         val onDetached = KavaReflector.findMethodRecursive(footerClass, "onDetachedFromWindow")
         return runCatching {
-            HookRegistry.get().hook(onAttached, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onAttached, object : HookCallback {
+                override fun after(param: HookParam) {
                     val footer = param.thisObject
                     if (footer is View) {
                         currentFooterRef = WeakReference(footer)
@@ -96,8 +97,8 @@ private class QuoteDeleteClearRuntime(
                 }
             })
             if (onDetached != null) {
-                HookRegistry.get().hook(onDetached, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(onDetached, object : HookCallback {
+                    override fun after(param: HookParam) {
                         if (currentFooterRef.get() === param.thisObject) {
                             currentFooterRef = WeakReference(null)
                         }
@@ -120,8 +121,8 @@ private class QuoteDeleteClearRuntime(
             EditorInfo::class.java
         ) ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     val input = param.thisObject as? TextView ?: return
                     val footer = footerForInput(input) ?: return
                     val target = param.result as? InputConnection ?: return
@@ -146,10 +147,10 @@ private class QuoteDeleteClearRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (handleOnKeyDelete(param)) {
-                        param.setResult(true)
+                        param.result = true
                     }
                 }
             })
@@ -161,7 +162,7 @@ private class QuoteDeleteClearRuntime(
         }
     }
 
-    private fun handleOnKeyDelete(param: XC_MethodHook.MethodHookParam): Boolean {
+    private fun handleOnKeyDelete(param: HookParam): Boolean {
         if (!isEnabled()) return false
         val event = param.args?.getOrNull(2) as? KeyEvent ?: return false
         if (event.action != KeyEvent.ACTION_DOWN || event.keyCode != KeyEvent.KEYCODE_DEL) return false
@@ -185,7 +186,7 @@ private class QuoteDeleteClearRuntime(
         return true
     }
 
-    private fun findChatFooter(param: XC_MethodHook.MethodHookParam): Any? {
+    private fun findChatFooter(param: HookParam): Any? {
         (param.args?.getOrNull(0) as? View)?.let { view ->
             findChatFooterInParents(view)?.let { return it }
         }
@@ -292,7 +293,7 @@ private class QuoteDeleteClearRuntime(
         return (KavaReflector.invokeMethod(footer, "getLastText") as? CharSequence)?.toString().orEmpty()
     }
 
-    private fun inputText(param: XC_MethodHook.MethodHookParam, footer: Any): String {
+    private fun inputText(param: HookParam, footer: Any): String {
         val input = param.args?.getOrNull(0) as? TextView
         return input?.text?.toString() ?: lastText(footer)
     }

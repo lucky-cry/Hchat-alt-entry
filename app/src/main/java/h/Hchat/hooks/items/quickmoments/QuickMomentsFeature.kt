@@ -10,7 +10,8 @@ import android.view.ContextMenu
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.BaseFeature
@@ -141,8 +142,8 @@ private class QuickMomentsMenuRuntime(
     @Synchronized
     fun install(): Boolean {
         val create = ConversationMenuLocator.menuCreateMethod(context, logger) ?: return false
-        return hook(create, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hook(create, object : HookCallback {
+            override fun after(param: HookParam) {
                 addMenuItem(param)
             }
         })
@@ -153,7 +154,7 @@ private class QuickMomentsMenuRuntime(
         bindings.clear()
     }
 
-    private fun addMenuItem(param: XC_MethodHook.MethodHookParam) {
+    private fun addMenuItem(param: HookParam) {
         val menu = param.args?.getOrNull(0) as? ContextMenu ?: return
         val view = param.args?.getOrNull(1) as? View ?: return
         val activity = findActivity(view.context) ?: return
@@ -186,8 +187,8 @@ private class QuickMomentsMenuRuntime(
                 candidate.returnType == Void.TYPE &&
                     candidate.declaringClass.name.startsWith("com.tencent.mm.ui.conversation.")
             } ?: return false
-        return hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        return hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 val item = param.args?.getOrNull(0) as? MenuItem ?: return
                 if (item.itemId != MENU_ITEM_ID) return
                 val target = bindings.remove(item) ?: return
@@ -252,7 +253,7 @@ private class QuickMomentsMenuRuntime(
         return current as? Activity
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {

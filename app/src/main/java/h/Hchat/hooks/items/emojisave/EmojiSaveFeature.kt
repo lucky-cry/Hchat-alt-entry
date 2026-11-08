@@ -6,7 +6,8 @@ import android.os.Looper
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
@@ -78,15 +79,15 @@ private class EmojiSaveRuntime(
     @Synchronized
     fun install(): Boolean {
         val createHooked = SingleMessageMenuLocator.menuCreateMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addSaveMenu(param)
                 }
             })
         }
         val clickHooked = SingleMessageMenuLocator.menuClickMethods(context, logger).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleSaveClick(param)
                 }
             })
@@ -100,7 +101,7 @@ private class EmojiSaveRuntime(
         bindings.clear()
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -113,7 +114,7 @@ private class EmojiSaveRuntime(
         }
     }
 
-    private fun addSaveMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addSaveMenu(param: HookParam) {
         if (!enabled()) return
         val args = param.args ?: return
         val menu = args.getOrNull(0) ?: return
@@ -124,7 +125,7 @@ private class EmojiSaveRuntime(
         bindings[item] = message
     }
 
-    private fun handleSaveClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleSaveClick(param: HookParam) {
         if (!enabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != MENU_ITEM_ID) return

@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.fakelocation
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -162,8 +163,8 @@ private object FakeLocationProcessHooker {
         callbacks.forEach { callback ->
             if (!hookedCallbacks.add(callback)) return@forEach
             runCatching {
-                HookRegistry.get().hook(callback, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(callback, object : HookCallback {
+                    override fun before(param: HookParam) {
                         runCatching {
                             hookLocationGetters(context, param.args?.firstOrNull(), logger)
                         }.onFailure {
@@ -201,8 +202,8 @@ private object FakeLocationProcessHooker {
     private fun hookGetter(context: Context, method: Method, value: () -> Double) {
         if (!hookedGetters.add(method)) return
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!FakeLocationFeature.isEnabled(context)) return
                     param.result = value()
                 }

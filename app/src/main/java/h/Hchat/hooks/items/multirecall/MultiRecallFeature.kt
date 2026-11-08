@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.multirecall
 import android.app.Activity
 import android.view.MenuItem
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.MultiSelectMessageMenuLocator
@@ -60,13 +61,13 @@ private class MultiRecallHooker(
         val exitMethod = menuClickMethod?.let {
             MultiSelectMessageMenuLocator.multiSelectExitMethod(context, it, logger)
         }
-        val createHooked = menuCreateMethod != null && exitMethod != null && hookMethod(menuCreateMethod, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val createHooked = menuCreateMethod != null && exitMethod != null && hookMethod(menuCreateMethod, object : HookCallback {
+            override fun after(param: HookParam) {
                 addRecallMenu(param)
             }
         })
-        val clickHooked = menuClickMethod != null && exitMethod != null && hookMethod(menuClickMethod, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val clickHooked = menuClickMethod != null && exitMethod != null && hookMethod(menuClickMethod, object : HookCallback {
+            override fun before(param: HookParam) {
                 handleRecallMenuClick(param, exitMethod)
             }
         })
@@ -75,7 +76,7 @@ private class MultiRecallHooker(
         return createHooked && clickHooked
     }
 
-    private fun addRecallMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addRecallMenu(param: HookParam) {
         if (!isEnabled()) return
         val selected = MultiSelectMessageResolver.resolve(param.thisObject)
         if (recallMessages(selected) == null) return
@@ -83,7 +84,7 @@ private class MultiRecallHooker(
         addMenuItem(menu)
     }
 
-    private fun handleRecallMenuClick(param: XC_MethodHook.MethodHookParam, exitMethod: Method) {
+    private fun handleRecallMenuClick(param: HookParam, exitMethod: Method) {
         if (!isEnabled()) return
         val menuItem = param.args?.getOrNull(0) as? MenuItem ?: return
         if (menuItem.itemId != MENU_ITEM_ID) return
@@ -170,7 +171,7 @@ private class MultiRecallHooker(
         return prefs.getBoolean(MultiRecallSettings.KEY_ENABLE, MultiRecallSettings.DEFAULT_ENABLE)
     }
 
-    private fun hookMethod(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hookMethod(method: Method, callback: HookCallback): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
             HookRegistry.get().hook(method, callback)

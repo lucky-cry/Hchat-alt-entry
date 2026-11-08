@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.patblock
 
 import android.view.View
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -71,8 +72,8 @@ private class PatBlockHooker(
         if (installed) return true
         val method = locateAvatarDoubleClickMethod(allowDexSearch) ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (isEnabled()) {
                         param.result = true
                     }

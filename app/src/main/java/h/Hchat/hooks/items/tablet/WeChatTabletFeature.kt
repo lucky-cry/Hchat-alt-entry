@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.view.View
 import android.widget.Button
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -109,8 +109,8 @@ class WeChatTabletFeature : BaseFeature() {
             val key = hookKey(method, fallbackClassLoader)
             synchronized(WeChatTabletFeature::class.java) {
                 if (padHookedLoaders.contains(key)) return
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun after(param: HookParam) {
                         param.result = Throwable().stackTrace.none {
                             it.className.contains(CHAT_VOICE_STACK)
                         }
@@ -124,8 +124,8 @@ class WeChatTabletFeature : BaseFeature() {
             val key = hookKey(method, fallbackClassLoader)
             synchronized(WeChatTabletFeature::class.java) {
                 if (loginButtonHookedLoaders.contains(key)) return
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         val button = param.args?.firstOrNull() as? Button ?: return
                         if (button.visibility != View.VISIBLE) button.visibility = View.VISIBLE
                     }

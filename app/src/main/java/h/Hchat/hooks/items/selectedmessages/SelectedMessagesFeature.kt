@@ -7,7 +7,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MenuItem
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -96,20 +97,20 @@ private class SelectedMessagesHooker(
         val menuCreate = MultiSelectMessageMenuLocator.menuCreateMethod(context, logger)
         val menuClick = MultiSelectMessageMenuLocator.menuClickMethod(context, logger)
         val exitMethod = menuClick?.let { MultiSelectMessageMenuLocator.multiSelectExitMethod(context, it, logger) }
-        val createHooked = menuCreate != null && exitMethod != null && hook(menuCreate, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val createHooked = menuCreate != null && exitMethod != null && hook(menuCreate, object : HookCallback {
+            override fun after(param: HookParam) {
                 addMenu(param)
             }
         })
-        val clickHooked = menuClick != null && exitMethod != null && hook(menuClick, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val clickHooked = menuClick != null && exitMethod != null && hook(menuClick, object : HookCallback {
+            override fun before(param: HookParam) {
                 handleMenuClick(param, exitMethod)
             }
         })
         val doneMethods = locateRetransmitDoneMethods()
         val doneHooked = doneMethods.isNotEmpty() && doneMethods.all { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     if (moduleSender.handleRetransmitDone(activity)) param.result = null
                 }
@@ -123,7 +124,7 @@ private class SelectedMessagesHooker(
         return createHooked && clickHooked && doneHooked && officialHooked
     }
 
-    private fun addMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addMenu(param: HookParam) {
         if (!isEnabled()) return
         if (MultiSelectMessageResolver.resolve(param.thisObject).isEmpty()) return
         val menu = param.args?.getOrNull(0) ?: return
@@ -139,7 +140,7 @@ private class SelectedMessagesHooker(
             ?: KavaReflector.invokeMethod(menu, "f", itemId, title as CharSequence)
     }
 
-    private fun handleMenuClick(param: XC_MethodHook.MethodHookParam, exitMethod: Method) {
+    private fun handleMenuClick(param: HookParam, exitMethod: Method) {
         if (!isEnabled()) return
         val item = param.args?.getOrNull(0) as? MenuItem ?: return
         val action = when (item.itemId) {
@@ -585,7 +586,7 @@ private class SelectedMessagesHooker(
             method.parameterTypes.contentEquals(arrayOf(String::class.java))
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
             HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, callback)

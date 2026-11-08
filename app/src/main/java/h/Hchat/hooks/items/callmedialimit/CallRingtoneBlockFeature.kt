@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.callmedialimit
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -88,8 +89,8 @@ private class CallRingtoneBlockHooker(
                 hookDirectionMethod(method, MULTI_TALK_OUTGOING_ARGUMENT_INDEX)
             }
             coreAccesses.forEach { access ->
-                HookRegistry.get().hook(access.start, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(access.start, object : HookCallback {
+                    override fun before(param: HookParam) {
                         val roomRole = param.args?.getOrNull(3) as? Boolean ?: return
                         val outgoing = !roomRole
                         if (!shouldBlock(outgoing)) return
@@ -117,8 +118,8 @@ private class CallRingtoneBlockHooker(
     }
 
     private fun hookDirectionMethod(method: Method, outgoingArgumentIndex: Int) {
-        HookRegistry.get().hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        HookRegistry.get().hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 val outgoing = param.args?.getOrNull(outgoingArgumentIndex) as? Boolean ?: return
                 if (shouldBlock(outgoing)) param.result = null
             }

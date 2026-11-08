@@ -1,8 +1,8 @@
 package h.Hchat.hooks.items.hotupdate
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
@@ -106,8 +106,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                     HLog.e("$TAG 未找到 TinkerApplication.getTinkerFlags")
                     return@runCatching false
                 }
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         param.result = 0
                     }
                 })
@@ -131,8 +131,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                     return@runCatching false
                 }
                 methods.forEach { method ->
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             val intent = param.args.getOrNull(1) as? android.content.Intent
                             runCatching {
                                 val shareIntentUtil = classLoader.loadClass("com.tencent.tinker.loader.shareutil.ShareIntentUtil")
@@ -168,8 +168,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                 return
             }
             runCatching {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         param.result = blockedReturnValue(method)
                     }
                 })
@@ -215,8 +215,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                     else DexMethodCache.clear(cache, runtimeKey, "sync_response_consumer")
                 }
                 methods.forEach { method ->
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             param.result = blockedReturnValue(method)
                         }
                     })
@@ -255,8 +255,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                     else DexMethodCache.clear(cache, runtimeKey, "upgrade_response")
                 }
                 methods.forEach { method ->
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             param.result = blockedReturnValue(method)
                         }
                     })
@@ -324,8 +324,8 @@ class DisableHotUpdateFeature : BaseFeature() {
                         method.returnType == Void.TYPE
                 }
                 methods.forEach { method ->
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             param.result = blockedReturnValue(method)
                         }
                     })

@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.callmedialimit
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -78,26 +79,26 @@ internal class CallMediaLimitHooker(
             val voipEventAccess = locateVoipEventAccess() ?: return false
 
             occupyMethods.forEach { method ->
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (!isEnabled()) return
                         param.result = false
                     }
                 })
             }
-            HookRegistry.get().hook(voipEventAccess.dispatch, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(voipEventAccess.dispatch, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!isVoicePlaybackGuardActive() || !isEnabled()) return
                     clearVoipUsageResult(param.thisObject, voipEventAccess.resultField)
                 }
             })
-            HookRegistry.get().hook(voicePlaybackGuard, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(voicePlaybackGuard, object : HookCallback {
+                override fun before(param: HookParam) {
                     val depth = voicePlaybackGuardDepth.get() ?: 0
                     voicePlaybackGuardDepth.set(depth + 1)
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val depth = (voicePlaybackGuardDepth.get() ?: 1) - 1
                     if (depth <= 0) {
                         voicePlaybackGuardDepth.remove()

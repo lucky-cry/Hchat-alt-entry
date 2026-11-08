@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.fakescancamera
 
 import android.app.Activity
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -61,8 +62,8 @@ private class FakeScanCameraHooker(
         var installedAny = false
         locateQBarStringHandlerMethods(allowDexSearch).forEach { method ->
             try {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         if (!isEnabled()) return
                         patchQBarStringArgs(param.args)
                     }

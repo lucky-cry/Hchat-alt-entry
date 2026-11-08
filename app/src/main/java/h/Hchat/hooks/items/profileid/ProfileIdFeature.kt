@@ -12,7 +12,8 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -103,8 +104,8 @@ class ProfileIdFeature : BaseFeature() {
             methodsOf(clazz)
                 .firstOrNull { it.name == "onPreferenceTreeClick" && it.parameterTypes.size >= 2 }
                 ?.let { method ->
-                    HookRegistry.get().hook(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             val activity = param.thisObject as? Activity ?: return
                             val preference = param.args.getOrNull(1) ?: return
                             if (preferenceKey(preference) != CHATROOM_PREF_KEY) return
@@ -129,15 +130,15 @@ class ProfileIdFeature : BaseFeature() {
             clazz: Class<*>,
             methodName: String,
             vararg parameterTypes: Class<*>,
-            block: (XC_MethodHook.MethodHookParam) -> Unit
+            block: (HookParam) -> Unit
         ) {
             val method = KavaReflector.findMethodRecursive(clazz, methodName, *parameterTypes)
             if (method == null) {
                 h.Hchat.utils.HLog.e("$TAG 未找到 ${clazz.name}#$methodName")
                 return
             }
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     runCatching { block(param) }.onFailure {
                         h.Hchat.utils.HLog.e("$TAG 注入资料页 ID 失败: ${it.message}", it)
                     }

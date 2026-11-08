@@ -6,7 +6,8 @@ import android.content.Context
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
@@ -565,18 +566,18 @@ private class EditMessageHooker(
     }
 
     private fun hookChatMethod(method: Method, menuCreate: Boolean): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 if (menuCreate) addEditMenu(param)
             }
 
-            override fun beforeHookedMethod(param: MethodHookParam) {
+            override fun before(param: HookParam) {
                 if (!menuCreate) handleEditClick(param)
             }
         })
     }
 
-    private fun hookMethod(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hookMethod(method: Method, callback: HookCallback): Boolean {
         if (!isHookableMethod(method)) return false
         if (!hookedMethods.add(method)) return true
         return try {
@@ -589,7 +590,7 @@ private class EditMessageHooker(
         }
     }
 
-    private fun addEditMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addEditMenu(param: HookParam) {
         clearMenuMessageBinding()
         if (!EditMessageRepository.isEnabled(context.hostContext())) return
         val args = param.args ?: return
@@ -616,7 +617,7 @@ private class EditMessageHooker(
         }
     }
 
-    private fun handleEditClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleEditClick(param: HookParam) {
         if (!EditMessageRepository.isEnabled(context.hostContext())) return
         val args = param.args ?: return
         val menuItem = findMenuItem(args) ?: return

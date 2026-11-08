@@ -9,7 +9,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.sns.SnsCachedNativeLookup
 import h.Hchat.hooks.api.sns.SnsContextMenuTarget
@@ -90,8 +91,8 @@ internal class MomentsFakeInteractionRuntime(
             runCatching {
                 HookRegistry.get().hook(
                     KavaReflector.accessible(method) ?: method,
-                    object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
+                    object : HookCallback {
+                        override fun after(param: HookParam) {
                             mergeIntoNativeInfo(param.thisObject)
                         }
                     }
@@ -309,8 +310,8 @@ internal class MomentsFakeInteractionRuntime(
         return runCatching {
             HookRegistry.get().hook(
                 KavaReflector.accessible(method) ?: method,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                object : HookCallback {
+                    override fun before(param: HookParam) {
                         val nativeInfo = param.args?.getOrNull(0) ?: return
                         val snsId = snsId(nativeInfo) ?: return
                         val comments = knownEntry(store.entry(snsId)).comments

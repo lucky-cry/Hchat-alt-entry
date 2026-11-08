@@ -20,7 +20,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import de.robv.android.xposed.XC_MethodHook;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 import h.Hchat.dexkit.DexFinder;
 import h.Hchat.hooks.api.core.WeChatApis;
 import h.Hchat.hooks.core.HookRegistry;
@@ -64,9 +65,9 @@ public class ProtobufPacketHook {
                     if (method.getParameterTypes().length != 3) continue;
                     String desc = base.getName() + "#" + method.toString();
                     if (!hookedDesc.add(desc)) continue;
-                    HookRegistry.get().hook(method, new XC_MethodHook() {
+                    HookRegistry.get().hook(method, new HookCallback() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
+                        public void before(HookParam param) {
                             handleDispatch(param);
                         }
                     });
@@ -234,14 +235,14 @@ public class ProtobufPacketHook {
         }
     }
 
-    private void handleDispatch(XC_MethodHook.MethodHookParam param) {
+    private void handleDispatch(HookParam param) {
         boolean logEnabled = enabled();
         boolean listenerEnabled = ProtobufPacketRuntime.hasListeners();
         if (!logEnabled && !listenerEnabled) return;
         try {
-            if (param.args == null || param.args.length < 3) return;
-            Object reqResp = param.args[1];
-            Object callback = param.args[2];
+            if (param.getArgs() == null || param.getArgs().length < 3) return;
+            Object reqResp = param.getArgs()[1];
+            Object callback = param.getArgs()[2];
             if (reqResp == null) return;
             String uri = safeString(call(reqResp, "getUri"));
             if (uri.length() == 0) uri = "null";
@@ -252,7 +253,7 @@ public class ProtobufPacketHook {
             final int finalCgiId = cgiId;
             final Object finalReqResp = reqResp;
 
-            PacketSnapshot snapshot = captureRequest(param.thisObject, reqResp, uri, cgiId);
+            PacketSnapshot snapshot = captureRequest(param.getThisObject(), reqResp, uri, cgiId);
             if (snapshot != null) {
                 snapshots.put(snapshot.key(), snapshot);
                 trimSnapshots();
@@ -283,7 +284,7 @@ public class ProtobufPacketHook {
                                 }
                                 return KavaReflector.invoke(method, callback, args == null ? new Object[0] : args);
                             });
-                    param.args[2] = proxy;
+                    param.getArgs()[2] = proxy;
             }
         } catch (Throwable e) {
             error("dispatch处理失败: " + e.getMessage());
@@ -321,11 +322,11 @@ public class ProtobufPacketHook {
         if (!isSceneEndMethod(method)) return 0;
         String desc = method.getDeclaringClass().getName() + "#" + method.toString();
         if (!hookedDesc.add(desc)) return 0;
-        HookRegistry.get().hook(method, new XC_MethodHook() {
+        HookRegistry.get().hook(method, new HookCallback() {
             @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                if (param.args == null || param.args.length < 4) return;
-                Object scene = param.args[3];
+            public void before(HookParam param) {
+                if (param.getArgs() == null || param.getArgs().length < 4) return;
+                Object scene = param.getArgs()[3];
                 if (!ProtobufPacketRuntime.isGenericScene(scene)) return;
                 param.setResult(null);
             }

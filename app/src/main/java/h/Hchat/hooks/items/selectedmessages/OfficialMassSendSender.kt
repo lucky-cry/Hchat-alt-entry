@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.selectedmessages
 import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.media.WeChatEmojiApi
@@ -45,8 +46,8 @@ class OfficialMassSendSender(
         runtime = resolved
         if (callbackHookInstalled) return true
         return runCatching {
-            HookRegistry.get().hook(resolved.sceneEndMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(resolved.sceneEndMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     handleSceneEnd(param.thisObject, param.args)
                 }
             })

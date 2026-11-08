@@ -18,7 +18,8 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -144,12 +145,12 @@ private class SwipeQuoteAdapter(
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!repeatMenuHookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (menuCreate) addRepeatMenu(param)
                 }
 
-                override fun beforeHookedMethod(param: MethodHookParam) {
+                override fun before(param: HookParam) {
                     if (!menuCreate) handleRepeatMenuClick(param)
                 }
             })
@@ -161,7 +162,7 @@ private class SwipeQuoteAdapter(
         }
     }
 
-    private fun addRepeatMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addRepeatMenu(param: HookParam) {
         clearRepeatMenuTargets()
         if (!isRepeatMenuEnabled()) return
         val args = param.args ?: return
@@ -179,7 +180,7 @@ private class SwipeQuoteAdapter(
         repeatMenuTargetsByGroup[menuItem.groupId] = target
     }
 
-    private fun handleRepeatMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleRepeatMenuClick(param: HookParam) {
         val menuItem = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (menuItem.itemId != MENU_REPEAT_ID) return
         val target = consumeRepeatMenuTarget(menuItem)
@@ -334,8 +335,8 @@ private class SwipeQuoteAdapter(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     bindMessageRoot(param)
                 }
             })
@@ -371,8 +372,8 @@ private class SwipeQuoteAdapter(
         val onAttached = KavaReflector.findMethodRecursive(footerClass, "onAttachedToWindow") ?: return false
         val onDetached = KavaReflector.findMethodRecursive(footerClass, "onDetachedFromWindow")
         return runCatching {
-            HookRegistry.get().hook(onAttached, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onAttached, object : HookCallback {
+                override fun after(param: HookParam) {
                     val footer = param.thisObject
                     if (footer is View) {
                         lastFooterRef = WeakReference(footer)
@@ -380,8 +381,8 @@ private class SwipeQuoteAdapter(
                 }
             })
             if (onDetached != null) {
-                HookRegistry.get().hook(onDetached, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(onDetached, object : HookCallback {
+                    override fun after(param: HookParam) {
                         if (lastFooterRef.get() === param.thisObject) {
                             lastFooterRef = WeakReference(null)
                         }
@@ -403,8 +404,8 @@ private class SwipeQuoteAdapter(
         for (method in methods) {
             val accessible = KavaReflector.accessible(method) ?: continue
             runCatching {
-                HookRegistry.get().hook(accessible, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(accessible, object : HookCallback {
+                    override fun before(param: HookParam) {
                         val activity = param.thisObject as? android.app.Activity ?: return
                         if (!activity.intent.getBooleanExtra(EXTRA_HCHAT_SILENT_REPEAT, false)) return
                         val targets = ArrayList<String>()
@@ -472,8 +473,8 @@ private class SwipeQuoteAdapter(
             MotionEvent::class.java
         )?.takeIf { it.declaringClass.name == recyclerViewClass.name } ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     val event = param.args?.getOrNull(0) as? MotionEvent ?: return
                     if (!isEnabled()) return
@@ -496,7 +497,7 @@ private class SwipeQuoteAdapter(
         }
     }
 
-    private fun bindMessageRoot(param: XC_MethodHook.MethodHookParam) {
+    private fun bindMessageRoot(param: HookParam) {
         val args = param.args ?: return
         if (args.size < 2) return
         val holder = args[0] ?: return

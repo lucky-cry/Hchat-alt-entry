@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.legacychatinput
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -66,8 +67,8 @@ class LegacyChatInputFeature : BaseFeature() {
         val preferences = LegacyChatInputSettings.preferences(context.hostContext())
 
         runCatching {
-            HookRegistry.get().hook(readMethod, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(readMethod, object : HookCallback {
+                override fun before(param: HookParam) {
                     val config = param.args?.firstOrNull() ?: return
                     val enabled = preferences.getBoolean(
                         LegacyChatInputSettings.KEY_ENABLE,

@@ -12,7 +12,8 @@ import android.widget.AdapterView
 import android.widget.ListAdapter
 import android.widget.ListView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -183,28 +184,28 @@ private class VoiceForwardHooker(
     }
 
     private fun hookChatMethod(method: Method, menuCreate: Boolean): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 if (menuCreate) addForwardMenu(param)
             }
 
-            override fun beforeHookedMethod(param: MethodHookParam) {
+            override fun before(param: HookParam) {
                 if (!menuCreate) handleForwardClick(param)
             }
         })
     }
 
     private fun hookFavoriteMenuCreateMethod(method: Method): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 addFavoriteMenu(param)
             }
         })
     }
 
     private fun hookFavoriteClickMethod(method: Method): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 handleFavoriteClick(param)
             }
         })
@@ -227,8 +228,8 @@ private class VoiceForwardHooker(
             addAll(locateFavoriteSearchItemClickMethods())
         }.distinctBy(Method::toGenericString)
         methods.forEach { method ->
-            if (hookMethod(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+            if (hookMethod(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         handleFavoriteSelectClick(param)
                     }
                 })) hooked++
@@ -290,12 +291,12 @@ private class VoiceForwardHooker(
             val clazz = KavaReflector.loadClass(className, context.hostClassLoader()) ?: return@forEach
             val method = KavaReflector.findMethod(clazz, "onCreate", Bundle::class.java)
                 ?: return@forEach
-            if (hookMethod(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+            if (hookMethod(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         removeVoiceFromFavoriteSelectorIntent(param.thisObject)
                     }
 
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                    override fun after(param: HookParam) {
                         allowVoiceInFavoriteSelector(param.thisObject)
                     }
                 })) {
@@ -322,8 +323,8 @@ private class VoiceForwardHooker(
                     )
             }
             .forEach { queryMethod ->
-                if (hookMethod(queryMethod, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                if (hookMethod(queryMethod, object : HookCallback {
+                        override fun before(param: HookParam) {
                             removeVoiceFromFavoriteAdapter(param.thisObject)
                         }
                     })) {
@@ -336,8 +337,8 @@ private class VoiceForwardHooker(
                     method.parameterTypes.isEmpty() &&
                     method.returnType == Void.TYPE
             }
-            if (resetMethod != null && hookMethod(resetMethod, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+            if (resetMethod != null && hookMethod(resetMethod, object : HookCallback {
+                    override fun before(param: HookParam) {
                         removeVoiceFromFavoriteAdapter(param.thisObject)
                     }
                 })) {
@@ -423,8 +424,8 @@ private class VoiceForwardHooker(
                         }
                 }
                 .forEach { method ->
-                    hookMethod(method, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    hookMethod(method, object : HookCallback {
+                        override fun before(param: HookParam) {
                             if (!favoriteClickForwardEnabled()) return
                             if (param.thisObject !in favoriteSelectorFilters) return
                             val item = param.args?.getOrNull(0) ?: return
@@ -524,22 +525,22 @@ private class VoiceForwardHooker(
     }
 
     private fun hookMultiNativeMenuCreateMethod(method: Method): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 addMultiNativeVoiceMenu(param)
             }
         })
     }
 
     private fun hookMultiNativeMenuClickMethod(method: Method, exitMethod: Method): Boolean {
-        return hookMethod(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        return hookMethod(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 handleMultiNativeVoiceMenuClick(param, exitMethod)
             }
         })
     }
 
-    private fun hookMethod(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hookMethod(method: Method, callback: HookCallback): Boolean {
         if (!hookedMethods.add(method)) return true
         return try {
             HookRegistry.get().hook(method, callback)
@@ -555,7 +556,7 @@ private class VoiceForwardHooker(
         return DexMethodCache.runtimeKey(context.hostContext(), context.hostClassLoader())
     }
 
-    private fun addForwardMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addForwardMenu(param: HookParam) {
         if (!isEnabled()) return
         val allowForward = chatForwardEnabled() && !messageForwardMenuEnabled()
         val allowSave = chatSaveEnabled()
@@ -575,7 +576,7 @@ private class VoiceForwardHooker(
         }
     }
 
-    private fun addFavoriteMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addFavoriteMenu(param: HookParam) {
         if (!isEnabled()) return
         val allowForward = favoriteMenuForwardEnabled()
         val allowSave = favoriteSaveEnabled()
@@ -605,7 +606,7 @@ private class VoiceForwardHooker(
         }
     }
 
-    private fun addMultiNativeVoiceMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addMultiNativeVoiceMenu(param: HookParam) {
         if (!isEnabled() || (!chatMultiForwardEnabled() && !chatMultiMergeEnabled())) return
         val messages = MultiSelectMessageResolver.resolve(param.thisObject)
         if (messages.isEmpty() || messages.any { !isVoiceMessage(it) }) return
@@ -660,7 +661,7 @@ private class VoiceForwardHooker(
         return 0
     }
 
-    private fun handleForwardClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleForwardClick(param: HookParam) {
         if (!isEnabled()) return
         val args = param.args ?: return
         val menuItem = args.getOrNull(0) as? MenuItem ?: return
@@ -688,7 +689,7 @@ private class VoiceForwardHooker(
         param.result = true
     }
 
-    private fun handleFavoriteClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleFavoriteClick(param: HookParam) {
         if (!isEnabled()) return
         val args = param.args ?: return
         val menuItem = args.getOrNull(0) as? MenuItem ?: return
@@ -720,7 +721,7 @@ private class VoiceForwardHooker(
         param.result = null
     }
 
-    private fun handleFavoriteSelectClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleFavoriteSelectClick(param: HookParam) {
         if (!favoriteClickForwardEnabled()) return
         val view = param.args?.getOrNull(1) as? View ?: return
         val selectActivity = favoriteSelectActivity(param.thisObject)
@@ -777,7 +778,7 @@ private class VoiceForwardHooker(
         param.result = null
     }
 
-    private fun handleMultiNativeVoiceMenuClick(param: XC_MethodHook.MethodHookParam, exitMethod: Method) {
+    private fun handleMultiNativeVoiceMenuClick(param: HookParam, exitMethod: Method) {
         if (!isEnabled()) return
         val args = param.args ?: return
         val menuItem = args.getOrNull(0) as? MenuItem ?: return
@@ -1512,7 +1513,7 @@ private class VoiceForwardHooker(
         return FavoriteMenuItemResolver.resolveMenuItem(source)
     }
 
-    private fun resolveFavoriteVoiceMenuItem(param: XC_MethodHook.MethodHookParam): Any? {
+    private fun resolveFavoriteVoiceMenuItem(param: HookParam): Any? {
         val args = param.args ?: return null
         val candidates = listOfNotNull(
             args.getOrNull(2),

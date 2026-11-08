@@ -10,7 +10,8 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.DexInstallScheduler
@@ -60,8 +61,8 @@ object GroupLeaveMonitorHighlighter {
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val original = param.args?.getOrNull(0) as? CharSequence ?: return
                     val highlighted = highlight(context, original) ?: return
                     param.args[0] = highlighted
@@ -232,8 +233,8 @@ object GroupLeaveMonitorHighlighter {
         var lastError: Throwable? = null
         for (method in methods) {
             runCatching {
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
                         val uri = findHchatUri(param.args) ?: return
                         val memberId = GroupLeaveMonitorLinks.memberIdFromUri(uri)
                         if (memberId.isBlank()) return

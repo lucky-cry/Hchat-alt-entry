@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.gameemoji
 import android.app.Activity
 import android.os.Handler
 import android.os.Looper
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.BaseFeature
@@ -71,8 +72,8 @@ private class GameEmojiRuntime(
         val fields = resolveEmojiFields(method.parameterTypes[1]) ?: return false
         emojiFields = fields
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (replaying.get() == true) return
                     val emojiInfo = param.args?.getOrNull(1) ?: return
                     val gameType = detectGameType(emojiInfo) ?: return
@@ -100,7 +101,7 @@ private class GameEmojiRuntime(
 
     private fun interceptForChoice(
         method: Method,
-        param: XC_MethodHook.MethodHookParam,
+        param: HookParam,
         gameType: GameType
     ) {
         val activity = (WeChatApis.currentActivity()?.currentActivity() as? Activity)

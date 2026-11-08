@@ -6,8 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.View
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.sns.SnsContextMenuTarget
@@ -282,7 +282,7 @@ internal class MomentsFakeForwardRuntime(
 
     private fun trace(message: String) {
         if (!debugLoggingEnabled()) return
-        XposedBridge.log("$TAG $message")
+        h.Hchat.utils.HLog.e("$TAG $message")
     }
 
     private fun debugLoggingEnabled(): Boolean = prefs.getBoolean(
@@ -467,8 +467,8 @@ internal class MomentsFakeForwardRuntime(
         }.onFailure { logger("朋友圈 Improve 分页诊断入口定位失败", it) }.getOrNull() ?: return false
         DexMethodCache.save(cachePrefs, runtimeKey, CACHE_IMPROVE_PAGE_QUERY, method)
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun after(param: HookParam) {
                     logImprovePageDiagnostic(param)
                 }
             })
@@ -482,7 +482,7 @@ internal class MomentsFakeForwardRuntime(
             method.parameterTypes.size == 1 && List::class.java.isAssignableFrom(method.returnType)
     }
 
-    private fun logImprovePageDiagnostic(param: XC_MethodHook.MethodHookParam) {
+    private fun logImprovePageDiagnostic(param: HookParam) {
         if (!debugLoggingEnabled()) return
         if (SystemClock.elapsedRealtime() > diagnosticUntilElapsed) return
         val registered = prefs.getStringSet(
@@ -786,8 +786,8 @@ internal class MomentsFakeForwardRuntime(
         if (timelineAdapterTrackerInstalled) return true
         if (!isTimelineLocalReloadMethod(method)) return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val adapter = param.thisObject ?: return
                     if (method.declaringClass.isInstance(adapter)) {
                         timelineAdapterRef = WeakReference(adapter)
@@ -814,8 +814,8 @@ internal class MomentsFakeForwardRuntime(
         ) ?: return false
         if (method.returnType != Void.TYPE || Modifier.isStatic(method.modifiers)) return false
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val rawId = KavaReflector.readField(param.thisObject, "field_snsId") ?: return
                     val id = normalizeId(rawId.toString()) ?: return
                     if (!isFakeId(id)) return
@@ -876,8 +876,8 @@ internal class MomentsFakeForwardRuntime(
         }.getOrNull() ?: return false
         DexMethodCache.save(cachePrefs, runtimeKey, CACHE_DELETE_CALLBACK, method)
         return runCatching {
-            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val id = findTaggedId(param.thisObject) ?: return
                     if (!isFakeId(id)) return
                     val info = WeChatApis.snsApi()?.cachedNativeSnsInfo(id) ?: return
@@ -951,8 +951,8 @@ internal class MomentsFakeForwardRuntime(
         queryPredicateMethod = predicate
         if (!userQueryDiagnosticInstalled) {
             userQueryDiagnosticInstalled = runCatching {
-                HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(KavaReflector.accessible(method) ?: method, object : HookCallback {
+                    override fun after(param: HookParam) {
                         logUserQueryDiagnostic(param)
                     }
                 })
@@ -961,8 +961,8 @@ internal class MomentsFakeForwardRuntime(
         }
         if (!timelineQueryDiagnosticInstalled) {
             timelineQueryDiagnosticInstalled = runCatching {
-                HookRegistry.get().hook(KavaReflector.accessible(timeline) ?: timeline, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(KavaReflector.accessible(timeline) ?: timeline, object : HookCallback {
+                    override fun after(param: HookParam) {
                         logTimelineQueryDiagnostic(param)
                     }
                 })
@@ -1001,7 +1001,7 @@ internal class MomentsFakeForwardRuntime(
             method.parameterTypes[0].name == "com.tencent.mm.sdk.event.IEvent"
     }
 
-    private fun logUserQueryDiagnostic(param: XC_MethodHook.MethodHookParam) {
+    private fun logUserQueryDiagnostic(param: HookParam) {
         if (!debugLoggingEnabled()) return
         val limit = (param.args.getOrNull(2) as? Number)?.toInt() ?: return
         if (limit == VERIFY_QUERY_LIMIT) return
@@ -1084,7 +1084,7 @@ internal class MomentsFakeForwardRuntime(
         logRegisteredState("query:$page:$caller")
     }
 
-    private fun logTimelineQueryDiagnostic(param: XC_MethodHook.MethodHookParam) {
+    private fun logTimelineQueryDiagnostic(param: HookParam) {
         if (!debugLoggingEnabled()) return
         val ids = prefs.getStringSet(
             MomentsFakeInteractionSettings.KEY_FAKE_FORWARD_IDS,

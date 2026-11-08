@@ -8,7 +8,8 @@ import android.os.SystemClock
 import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.sns.PreparedSnsForward
@@ -126,15 +127,15 @@ private class MessageForwardHooker(
         val createMethods = SingleMessageMenuLocator.menuCreateMethods(context, logger)
         val clickMethods = SingleMessageMenuLocator.menuClickMethods(context, logger)
         val createHooked = createMethods.count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addForwardMenu(param)
                 }
             })
         }
         val clickHooked = clickMethods.count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleForwardClick(param)
                 }
             })
@@ -148,14 +149,14 @@ private class MessageForwardHooker(
             MultiSelectMessageMenuLocator.multiSelectExitMethod(context, it, logger)
         }
         val multiCreateHooked = multiCreateMethod != null && multiExitMethod != null &&
-            hook(multiCreateMethod, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(multiCreateMethod, object : HookCallback {
+                override fun after(param: HookParam) {
                     addMultiMomentsMenu(param)
                 }
             })
         val multiClickHooked = multiClickMethod != null && multiExitMethod != null &&
-            hook(multiClickMethod, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(multiClickMethod, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleMultiMomentsClick(param, multiExitMethod)
                 }
             })
@@ -167,8 +168,8 @@ private class MessageForwardHooker(
             includeDetails = false,
             logger = logger
         ).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addFavoriteForwardMenu(param)
                 }
             })
@@ -178,8 +179,8 @@ private class MessageForwardHooker(
             includeDetails = false,
             logger = logger
         ).count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleFavoriteForwardClick(param)
                 }
             })
@@ -201,7 +202,7 @@ private class MessageForwardHooker(
         executor.shutdownNow()
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -214,7 +215,7 @@ private class MessageForwardHooker(
         }
     }
 
-    private fun addForwardMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addForwardMenu(param: HookParam) {
         clearBindings()
         if (!singleForwardEnabled()) return
         val args = param.args ?: return
@@ -229,7 +230,7 @@ private class MessageForwardHooker(
         moveAfterRepeat(menu, item)
     }
 
-    private fun handleForwardClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleForwardClick(param: HookParam) {
         if (!singleForwardEnabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != SingleMessageMenuLocator.HCHAT_FORWARD_MENU_ITEM_ID) return
@@ -252,7 +253,7 @@ private class MessageForwardHooker(
         }
     }
 
-    private fun addMultiMomentsMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addMultiMomentsMenu(param: HookParam) {
         if (!multiMomentsEnabled()) return
         val selected = MultiSelectMessageResolver.resolve(param.thisObject)
         val types = selected.mapNotNull(::nativeMessageType)
@@ -262,7 +263,7 @@ private class MessageForwardHooker(
     }
 
     private fun handleMultiMomentsClick(
-        param: XC_MethodHook.MethodHookParam,
+        param: HookParam,
         exitMethod: Method
     ) {
         if (!multiMomentsEnabled()) return
@@ -297,7 +298,7 @@ private class MessageForwardHooker(
         }
     }
 
-    private fun addFavoriteForwardMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun addFavoriteForwardMenu(param: HookParam) {
         if (!favoriteForwardEnabled()) return
         val args = param.args ?: return
         val favorite = FavoriteMenuItemResolver.resolveMenuItem(args.getOrNull(2))
@@ -332,7 +333,7 @@ private class MessageForwardHooker(
     }
 
     @Synchronized
-    private fun handleFavoriteForwardClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleFavoriteForwardClick(param: HookParam) {
         if (!favoriteForwardEnabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != FAVORITE_FORWARD_MENU_ITEM_ID) return

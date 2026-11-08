@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.miniprogramvideoad
 
 import android.content.Context
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -68,8 +69,8 @@ class SkipMiniProgramVideoAdsFeature : BaseFeature() {
                     return false
                 }
                 return runCatching {
-                    HookRegistry.get().hook(subscribeHandler, object : XC_MethodHook() {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    HookRegistry.get().hook(subscribeHandler, object : HookCallback {
+                        override fun before(param: HookParam) {
                             if (param.args.getOrNull(0) != EVENT_VIDEO_TIME_UPDATE) return
                             if (!isEnabled(context)) return
                             val payload = param.args.getOrNull(1) as? String ?: return

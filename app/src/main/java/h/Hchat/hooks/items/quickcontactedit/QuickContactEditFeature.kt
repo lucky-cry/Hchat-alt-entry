@@ -12,7 +12,8 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.model.ContactLabelBean
@@ -139,8 +140,8 @@ private class QuickContactEditRuntime(
     @Synchronized
     fun installConversationMenuHook(): Boolean {
         val create = ConversationMenuLocator.menuCreateMethod(context, logger)
-        val createInstalled = create != null && hook(create, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val createInstalled = create != null && hook(create, object : HookCallback {
+            override fun after(param: HookParam) {
                 addMenuItem(param)
             }
         })
@@ -161,15 +162,15 @@ private class QuickContactEditRuntime(
     fun installSnsAvatarMenuHook(): Boolean {
         val methods = SnsAvatarMenuLocator.locate(context, logger)
         val createInstalled = methods.createMethods.count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     addSnsAvatarMenuItem(param)
                 }
             })
         }
         val clickInstalled = methods.clickMethods.count { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     handleSnsAvatarMenuClick(param, method)
                 }
             })
@@ -179,7 +180,7 @@ private class QuickContactEditRuntime(
         return createInstalled > 0 && clickInstalled > 0
     }
 
-    private fun addSnsAvatarMenuItem(param: XC_MethodHook.MethodHookParam) {
+    private fun addSnsAvatarMenuItem(param: HookParam) {
         if (!enabled()) return
         val menu = param.args?.getOrNull(0) as? ContextMenu ?: return
         val view = param.args?.getOrNull(1) as? View ?: return
@@ -194,7 +195,7 @@ private class QuickContactEditRuntime(
         pendingSnsMenuTarget = target
     }
 
-    private fun handleSnsAvatarMenuClick(param: XC_MethodHook.MethodHookParam, method: Method) {
+    private fun handleSnsAvatarMenuClick(param: HookParam, method: Method) {
         if (!enabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != SNS_MENU_ITEM_ID) return
@@ -284,8 +285,8 @@ private class QuickContactEditRuntime(
             "setAvatarOnClickListener",
             View.OnClickListener::class.java
         ) ?: return false
-        return hook(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        return hook(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 bindSnsAvatar(param.thisObject, param.args?.getOrNull(0) as? View.OnClickListener)
             }
         })
@@ -381,7 +382,7 @@ private class QuickContactEditRuntime(
         }.getOrDefault(false)
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (Modifier.isAbstract(method.modifiers) || method.declaringClass.isInterface) return false
         if (!hookedMethods.add(method)) return true
         return runCatching {
@@ -394,7 +395,7 @@ private class QuickContactEditRuntime(
         }
     }
 
-    private fun addMenuItem(param: XC_MethodHook.MethodHookParam) {
+    private fun addMenuItem(param: HookParam) {
         if (!enabled()) return
         val menu = param.args?.getOrNull(0) as? ContextMenu ?: return
         if (!installMenuClickHook(param.thisObject)) return
@@ -425,14 +426,14 @@ private class QuickContactEditRuntime(
                 candidate.returnType == Void.TYPE &&
                     candidate.declaringClass.name.startsWith("com.tencent.mm.ui.conversation.")
             } ?: return false
-        return hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        return hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 handleMenuClick(param)
             }
         })
     }
 
-    private fun handleMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleMenuClick(param: HookParam) {
         if (!enabled()) return
         val item = param.args?.getOrNull(0) as? MenuItem ?: return
         if (item.itemId != MENU_ITEM_ID) return
