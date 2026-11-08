@@ -302,6 +302,12 @@ public class DexFinder {
                 resolveDatabaseApiInternal();
                 repaired = true;
             }
+            if (netQueueClass == null || !networkQueueLocatorResolved) {
+                // 同理：网络队列缓存为空会导致主动发包（红包/转账/脚本）永久失效。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少网络队列，补解析一次");
+                resolveNetworkQueue();
+                repaired = true;
+            }
             if (!isSendTextLocatorCacheCurrent()) {
                 resolveSendTextMsg();
                 repaired = true;
