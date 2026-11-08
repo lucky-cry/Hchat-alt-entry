@@ -1,7 +1,7 @@
 package h.Hchat.hooks.core
 
 import android.content.Context
-import de.robv.android.xposed.callbacks.XC_LoadPackage
+import h.Hchat.HostEnv
 import h.Hchat.dexkit.DexBridgeHolder
 import h.Hchat.dexkit.DexFinder
 import h.Hchat.event.EventBus
@@ -16,7 +16,7 @@ class FeatureContext(
     private val hostContext: Context,
     private val moduleContext: Context,
     private val hostClassLoader: ClassLoader,
-    private val loadPackageParam: XC_LoadPackage.LoadPackageParam,
+    private val loadPackageParam: HostEnv,
     private val dexKitBridge: DexKitBridge,
     private val dexFinder: DexFinder,
     private val eventBus: EventBus,
@@ -30,7 +30,7 @@ class FeatureContext(
 
     fun hostClassLoader(): ClassLoader = hostClassLoader
 
-    fun loadPackageParam(): XC_LoadPackage.LoadPackageParam = loadPackageParam
+    fun loadPackageParam(): HostEnv = loadPackageParam
 
     fun dexKitBridge(): DexKitBridge = dexKitBridge
 

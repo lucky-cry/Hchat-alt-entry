@@ -1,19 +1,70 @@
 package h.Hchat.libxposed
 
+import android.app.Application
+import android.app.ActivityThread
+import android.os.Process
+import h.Hchat.HostEnv
+import h.Hchat.ModuleEntry
+import h.Hchat.utils.HLog
+import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
 
 /**
- * libxposed API 102 入口（迁移中）。
+ * libxposed API 102 入口。
  *
- * 当前只做参数接线与日志，不接管 Hook：真正的初始化仍由 legacy
- * `h.Hchat.ModuleEntry`（assets/xposed_init）完成，因此本类暂不加入
- * META-INF/xposed/java_init.list，避免两套入口同时声明。
+ * 与 legacy 入口的区别只在外壳：拿到 ClassLoader / ApplicationInfo 后，
+ * 统一交给 ModuleEntry.bootstrap(HostEnv)，所有功能逻辑不变。
  */
 class HchatModule : XposedModule() {
 
+    override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam?) {
+        HLog.installSink { message, throwable ->
+            if (throwable == null) {
+                log(LogLevel.ERROR, "Hchat", message)
+            } else {
+                log(LogLevel.ERROR, "Hchat", message, throwable)
+            }
+        }
+        super.onModuleLoaded(param)
+    }
+
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
-        // 迁移完成后在这里转调 ModuleEntry 的初始化逻辑：
-        // param.classLoader / param.packageName / param.applicationInfo
+        if (!param.packageName.startsWith(WECHAT_PKG)) return
+        val app = currentApplication() ?: return
+        if (!isMainOrAppBrand(param.packageName)) return
+        val env = HostEnv(
+            app,
+            param.classLoader ?: app.classLoader,
+            param.packageName,
+            currentProcessName() ?: param.packageName,
+            param.applicationInfo
+        )
+        runCatching { ModuleEntry().bootstrap(env) }
+            .onFailure { HLog.e("[Hchat:Entry] 102 入口初始化失败", it) }
+    }
+
+    private fun isMainOrAppBrand(packageName: String): Boolean {
+        val process = currentProcessName() ?: return true
+        return process == packageName || process.startsWith("$packageName:appbrand")
+    }
+
+    private fun currentApplication(): Application? = runCatching {
+        ActivityThread.currentApplication()
+    }.getOrNull()
+
+    private fun currentProcessName(): String? = runCatching {
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            Application.getProcessName()
+        } else {
+            null
+        }
+    }.getOrNull() ?: runCatching {
+        // 兜底：读 /proc/self/cmdline
+        java.io.File("/proc/self/cmdline").readText().trim().trimEnd('\u0000')
+    }.getOrNull()
+
+    companion object {
+        private const val WECHAT_PKG = "com.tencent.mm"
     }
 }
