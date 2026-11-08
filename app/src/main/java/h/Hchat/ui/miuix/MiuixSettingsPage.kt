@@ -9157,6 +9157,9 @@ internal fun FinderMediaDownloadMiuixPage(
     onBack: () -> Unit
 ) {
     val sp = remember { HchatStorage.preferences(context, FinderMediaDownloadSettings.PREFS_NAME) }
+    val pathState = remember {
+        mutableStateOf(sp.getString(FinderMediaDownloadSettings.KEY_SAVE_PATH, "").orEmpty())
+    }
     val listState = rememberLazyListState()
     val scrollBehavior = MiuixScrollBehavior()
 
@@ -9174,9 +9177,6 @@ internal fun FinderMediaDownloadMiuixPage(
                 bottom = padding.calculateBottomPadding() + 84.dp
             )
         ) {
-            val pathState = remember {
-                mutableStateOf(sp.getString(FinderMediaDownloadSettings.KEY_SAVE_PATH, "").orEmpty())
-            }
             item { SmallTitle(text = "视频号") }
             item {
                 SettingsCard {
