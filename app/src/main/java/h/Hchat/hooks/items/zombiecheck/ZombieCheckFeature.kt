@@ -86,7 +86,7 @@ internal class ZombieCheckHooker(
                     val args = param.args ?: return
                     if (args.size != 3) return
                     runtime.onProbeCallback(
-                        scene = param.thisObject,
+                        scene = param.thisObject ?: return,
                         errCode = (args[0] as? Number)?.toInt() ?: return,
                         errMessage = args[1]?.toString().orEmpty(),
                         response = args[2] as? JSONObject
