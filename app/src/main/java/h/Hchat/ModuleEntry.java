@@ -42,6 +42,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
+import h.Hchat.hooks.core.HookCallback;
+import h.Hchat.hooks.core.HookParam;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
@@ -100,21 +102,22 @@ public class ModuleEntry implements IXposedHookLoadPackage {
         installCustomBottomBarEarlyHook(lpparam);
 
         // 4. Hook Application.onCreate，等 Application 完全初始化后再启动模块
-        HookRegistry.get().add(XposedHelpers.findAndHookMethod(
+        HookRegistry.get().hookMethod(
                 Application.class,
                 "onCreate",
-                new XC_MethodHook() {
+                new Class<?>[0],
+                new HookCallback() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        Application app = (Application) param.thisObject;
+                    public void before(HookParam param) {
+                        Application app = (Application) param.getThisObject();
                         if (TermsGate.INSTANCE.isAccepted(app)) {
                             CrashReportRuntime.prepare(app);
                         }
                     }
 
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        Application app = (Application) param.thisObject;
+                    public void after(HookParam param) {
+                        Application app = (Application) param.getThisObject();
                         if (TermsGate.INSTANCE.isAccepted(app)) {
                             CrashReportRuntime.install(app, ModuleEntry.this.getClass().getClassLoader());
                             // 标签栏先捕获首页根视图，不能等待后台 DexKit 初始化后再挂载。
@@ -134,7 +137,7 @@ public class ModuleEntry implements IXposedHookLoadPackage {
                         new Thread(() -> initModule(app, lpparam), "Hchat-Init").start();
                     }
                 }
-        ));
+        );
     }
 
     // ============ 包名与进程判断 ============

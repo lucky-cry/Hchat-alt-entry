@@ -31,6 +31,44 @@ class HookRegistry private constructor() {
     fun hookForMigration(method: Member, callback: HookCallback): Any? =
         engine.hook(method, callback)
 
+    /** 按类 + 方法名挂载（替代 XposedHelpers.findAndHookMethod）。 */
+    fun hookMethod(
+        clazz: Class<*>?,
+        methodName: String,
+        parameterTypes: Array<Class<*>>,
+        callback: HookCallback
+    ): Any? {
+        if (clazz == null) return null
+        var current: Class<*>? = clazz
+        while (current != null) {
+            try {
+                val method = current.getDeclaredMethod(methodName, *parameterTypes)
+                method.isAccessible = true
+                return hookForMigration(method, callback)
+            } catch (_: NoSuchMethodException) {
+                current = current.superclass
+            }
+        }
+        h.Hchat.utils.HLog.e("[Hchat:Hook] 未找到方法: ${clazz.name}#$methodName")
+        return null
+    }
+
+    /** 按类名 + ClassLoader 挂载（替代 XposedHelpers.findAndHookMethod 的字符串重载）。 */
+    fun hookMethodByName(
+        className: String,
+        classLoader: ClassLoader?,
+        methodName: String,
+        parameterTypes: Array<Class<*>>,
+        callback: HookCallback
+    ): Any? {
+        return try {
+            hookMethod(Class.forName(className, false, classLoader), methodName, parameterTypes, callback)
+        } catch (e: Throwable) {
+            h.Hchat.utils.HLog.e("[Hchat:Hook] 类加载失败: $className", e)
+            null
+        }
+    }
+
     fun <T> withInstallationGeneration(generation: Long, action: () -> T): T {
         val previous = installationLease.get()
         if (!isInstallationGenerationActive(generation) || previous != null && previous != generation) {
