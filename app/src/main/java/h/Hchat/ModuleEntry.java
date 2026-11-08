@@ -390,7 +390,9 @@ public class ModuleEntry {
 
     private ClassLoader resolveTinkerClassLoader(Object tinkerApplication) {
         try {
-            Object value = KavaReflector.invoke(KavaReflector.findMethod(tinkerApplication.getClass(), "getClassLoader"), tinkerApplication);
+            java.lang.reflect.Method getClassLoader = tinkerApplication.getClass().getMethod("getClassLoader");
+            getClassLoader.setAccessible(true);
+            Object value = getClassLoader.invoke(tinkerApplication);
             return value instanceof ClassLoader ? (ClassLoader) value : null;
         } catch (Throwable ignored) {
             return null;

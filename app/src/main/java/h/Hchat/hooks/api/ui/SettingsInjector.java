@@ -685,7 +685,6 @@ public class SettingsInjector {
 
             // Hook onCreate
             HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onCreate", new Class<?>[0],
-                    android.os.Bundle.class,
                     new HookCallback() {
                         @Override
                         public void before(HookParam param) {
@@ -702,7 +701,6 @@ public class SettingsInjector {
 
             // Hook onNewIntent
             HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onNewIntent", new Class<?>[]{android.content.Intent.class},
-                    Intent.class,
                     new HookCallback() {
                         @Override
                         public void before(HookParam param) {
