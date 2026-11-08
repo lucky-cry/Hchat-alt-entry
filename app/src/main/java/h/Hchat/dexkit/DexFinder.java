@@ -2586,7 +2586,13 @@ public class DexFinder {
 
     // ============ 数据库/联系人公共 API ============
     public void resolveDatabaseApi() {
-        if (ensureSnapshotLoaded()) return;
+        h.Hchat.utils.HLog.e(TAG + " [DBDiag] 进入解析: 缓存值 sqlite="
+                + (sqliteDbWrapperClass != null ? sqliteDbWrapperClass.getName() : "null"));
+        if (ensureSnapshotLoaded()) {
+            h.Hchat.utils.HLog.e(TAG + " [DBDiag] 命中缓存快照，跳过解析: sqlite="
+                    + (sqliteDbWrapperClass != null ? sqliteDbWrapperClass.getName() : "null"));
+            return;
+        }
         try {
             if (coreStorageGetter != null && sqliteDbWrapperClass != null && configStorageClass != null) return;
 
