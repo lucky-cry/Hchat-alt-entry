@@ -77,6 +77,11 @@
 }
 
 # libxposed API 102 入口：java_init.list 按类名加载，必须保留原名与构造器
+-dontwarn io.github.libxposed.annotation.**
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}
 -keep class h.Hchat.libxposed.HchatModule { *; }
 -keepnames class h.Hchat.libxposed.**
 -keep class h.Hchat.HostEnv { *; }

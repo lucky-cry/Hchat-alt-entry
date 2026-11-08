@@ -9,15 +9,27 @@ import h.Hchat.hooks.core.LibxposedHookEngine
 import h.Hchat.utils.HLog
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * libxposed API 102 入口。
  *
- * 所有回调都用 android.util.Log 直接输出（不依赖模块日志与框架 getter），
- * 并整体包在 try/catch 里：入口早期任何异常都会让 LSPosed 静默放弃加载，
- * 表现为「能识别模块但没有日志、没有入口」。
+ * 关键时序（API 102 规范）：`onPackageReady` 发生在 AppComponentFactory 创建
+ * classloader 之后、Application 实例创建之前，此时 `ActivityThread.currentApplication()`
+ * 通常为 null。因此入口不能在这里 `return`，也不能把 Application 当作 bootstrap 的前置条件：
+ * 真正的初始化要由 ModuleEntry 挂 `Application.onCreate` 后触发。早期版本的入口在拿不到
+ * Application 时直接返回，表现就是「模块能识别、零日志、微信无入口」。
+ *
+ * 日志同时写 android.util.Log（logcat）和 module.log（LSPosed 日志页），便于区分
+ * 「框架没加载入口」和「入口加载了但没初始化」。
  */
 class HchatModule : XposedModule() {
+
+    private val bootstrapped = AtomicBoolean(false)
+
+    /** onModuleLoaded 拿到的进程名最权威，避免 /proc/self/cmdline 读取失败时误判主进程。 */
+    @Volatile
+    private var moduleProcessName: String? = null
 
     init {
         Log.i(TAG, "构造 HchatModule")
@@ -26,6 +38,7 @@ class HchatModule : XposedModule() {
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
         super.onModuleLoaded(param)
         Log.i(TAG, "onModuleLoaded")
+        moduleProcessName = runCatching { param.processName }.getOrNull()
         try {
             HookRegistry.get().setEngine(LibxposedHookEngine(this))
             HLog.installSink { message, throwable ->
@@ -35,41 +48,69 @@ class HchatModule : XposedModule() {
                 } catch (_: Throwable) {
                 }
             }
-            Log.i(TAG, "引擎与日志已注入")
+            logBoth(Log.INFO, "onModuleLoaded process=" + safeProcessName(param))
+            logBoth(
+                Log.INFO,
+                "framework=" + runCatching { frameworkName }.getOrDefault("?") +
+                    " version=" + runCatching { frameworkVersion }.getOrDefault("?") +
+                    " api=" + runCatching { apiVersion }.getOrDefault(-1)
+            )
         } catch (t: Throwable) {
-            Log.e(TAG, "onModuleLoaded 初始化失败", t)
+            logBoth(Log.ERROR, "onModuleLoaded 初始化失败", t)
         }
     }
 
     override fun onPackageLoaded(param: XposedModuleInterface.PackageLoadedParam) {
         super.onPackageLoaded(param)
-        Log.i(TAG, "onPackageLoaded: " + runCatching { param.packageName }.getOrDefault("?"))
+        val pkg = runCatching { param.packageName }.getOrDefault("?")
+        logBoth(Log.INFO, "onPackageLoaded: $pkg")
     }
 
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
         super.onPackageReady(param)
         val pkg = runCatching { param.packageName }.getOrDefault("")
-        Log.i(TAG, "onPackageReady: $pkg")
+        val process = moduleProcessName ?: currentProcessName() ?: pkg
+        logBoth(Log.INFO, "onPackageReady: pkg=$pkg process=$process")
         if (!pkg.startsWith(WECHAT_PKG)) return
+        if (process != pkg && !process.startsWith("$pkg:appbrand")) {
+            logBoth(Log.INFO, "跳过进程: $process")
+            return
+        }
+        if (!bootstrapped.compareAndSet(false, true)) {
+            logBoth(Log.INFO, "bootstrap 已执行，忽略重复的 onPackageReady")
+            return
+        }
         try {
-            val process = currentProcessName() ?: pkg
-            Log.i(TAG, "进程: $process")
-            if (process != pkg && !process.startsWith("$pkg:appbrand")) return
-            val app = currentApplication() ?: run {
-                Log.e(TAG, "拿不到 Application")
-                return
-            }
+            // 这里通常为 null：onPackageReady 早于 Application 创建。
+            // ModuleEntry 会挂 Application.onCreate，在回调里拿到真正的 Application。
+            val app = currentApplication()
+            logBoth(Log.INFO, "Application 状态: " + if (app == null) "尚未创建" else app.javaClass.name)
             val env = HostEnv(
                 app,
-                param.classLoader ?: app.classLoader,
+                param.classLoader,
                 pkg,
                 process,
                 param.applicationInfo
             )
             ModuleEntry().bootstrap(env)
-            Log.i(TAG, "bootstrap 完成")
+            logBoth(Log.INFO, "bootstrap 已执行（等待 Application.onCreate 初始化）")
         } catch (t: Throwable) {
-            Log.e(TAG, "onPackageReady 失败", t)
+            bootstrapped.set(false)
+            logBoth(Log.ERROR, "bootstrap 失败", t)
+        }
+    }
+
+    private fun safeProcessName(param: XposedModuleInterface.ModuleLoadedParam): String =
+        runCatching { param.processName }.getOrDefault("?")
+
+    private fun logBoth(priority: Int, message: String, throwable: Throwable? = null) {
+        if (throwable == null) Log.println(priority, TAG, message)
+        else Log.println(priority, TAG, message + "\n" + Log.getStackTraceString(throwable))
+        try {
+            if (throwable == null) log(priority, TAG, message)
+            else log(priority, TAG, message, throwable)
+        } catch (_: Throwable) {
+            // 未 attach 或框架日志不可用时只保留 logcat
         }
     }
 

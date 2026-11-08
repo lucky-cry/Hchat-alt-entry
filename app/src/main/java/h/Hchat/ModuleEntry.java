@@ -75,6 +75,12 @@ public class ModuleEntry {
             return;
         }
 
+        // 入口诊断：能走到这里说明 onPackageReady 已经拿到 classLoader；
+        // 此时 Application 通常仍为 null（API 102 规范），由下面的 onCreate Hook 再取。
+        HLog.e(TAG + " bootstrap 开始: package=" + lpparam.packageName
+                + " process=" + lpparam.processName
+                + " app=" + lpparam.app);
+
         // 热更新加载发生在 Tinker attach 阶段，必须早于普通功能初始化安装。
         installHotUpdateEarlyHook(lpparam);
 
@@ -90,9 +96,13 @@ public class ModuleEntry {
         }
 
         // 3. Mars CDN 管理器可能早于模块 API 初始化创建，先按稳定类名捕获实例。
-        WeChatImageApi.installMarsCdnManagerHook(
-                lpparam.classLoader,
-                message -> HLog.e("[Hchat:WechatApi] " + message));
+        try {
+            WeChatImageApi.installMarsCdnManagerHook(
+                    lpparam.classLoader,
+                    message -> HLog.e("[Hchat:WechatApi] " + message));
+        } catch (Throwable e) {
+            HLog.e(TAG + " Mars CDN 早期捕获失败: " + e.getMessage(), e);
+        }
 
         // 底栏在 LauncherUI 首帧前创建，必须早于完整 DexKit 初始化安装 Hook。
         installCustomBottomBarEarlyHook(lpparam);
