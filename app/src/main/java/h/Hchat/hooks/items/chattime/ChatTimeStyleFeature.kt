@@ -4,7 +4,8 @@ import android.content.SharedPreferences
 import android.view.View
 import android.widget.AbsListView
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -115,8 +116,8 @@ private class ChatTimeStyleRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val active = isEnabled() && currentMode() != ChatTimeStyleSettings.MODE_ORIGINAL
                     if (!active && bindings.isEmpty()) return
                     val state = BindState(captureTimeHolder(param.args))
@@ -127,7 +128,7 @@ private class ChatTimeStyleRuntime(
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     val stack = bindStates.get()
                     val state = stack?.pollLast() ?: return
                     if (stack.isEmpty()) bindStates.remove()

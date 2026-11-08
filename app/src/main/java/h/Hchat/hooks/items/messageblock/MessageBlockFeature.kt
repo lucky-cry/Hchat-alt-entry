@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.messageblock
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.callbacks.XCallback
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -45,8 +46,8 @@ class MessageBlockFeature : BaseFeature() {
                 if (method.returnType != Void.TYPE) continue
                 val addMsgArgIndexes = addMsgArgIndexes(method, parser)
                 if (addMsgArgIndexes.isEmpty()) continue
-                HookRegistry.get().hook(method, object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                    override fun before(param: HookParam) {
                         val args = param.args ?: return
                         val settings = MessageBlockSettings(context.hostContext())
                         if (!settings.isEnabled()) return

@@ -19,7 +19,8 @@ import android.widget.Button
 import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.callbacks.XCallback
 import h.Hchat.R
 import h.Hchat.dexkit.DexMethodCache
@@ -345,15 +346,15 @@ private class HomeTextColorRuntime(
     private fun installAdapterHook(method: Method?, kind: RowKind): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                override fun before(param: HookParam) {
                     (param.args?.getOrNull(1) as? View)?.let {
                         deferredConversationRows.remove(it)
                         restoreRow(it)
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     if (destroyed || param.hasThrowable()) return
                     val row = param.result as? View ?: return
                     if (row !== param.args?.getOrNull(1)) restoreRow(row)
@@ -386,8 +387,8 @@ private class HomeTextColorRuntime(
             modernConversationHolderInstalled = runCatching {
                 HookRegistry.get().hook(
                     methods.holder,
-                    object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                        override fun afterHookedMethod(param: MethodHookParam) {
+                    object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                        override fun after(param: HookParam) {
                             if (destroyed || param.hasThrowable()) return
                             val holder = param.args?.getOrNull(0) ?: return
                             val row = param.args?.getOrNull(1) as? View ?: return
@@ -409,15 +410,15 @@ private class HomeTextColorRuntime(
             modernConversationBindInstalled = runCatching {
                 HookRegistry.get().hook(
                     methods.bind,
-                    object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                        override fun beforeHookedMethod(param: MethodHookParam) {
+                    object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                        override fun before(param: HookParam) {
                             val holder = param.args?.getOrNull(1) ?: return
                             val row = modernConversationRows[holder]?.get() ?: return
                             deferredConversationRows.remove(row)
                             restoreRow(row)
                         }
 
-                        override fun afterHookedMethod(param: MethodHookParam) {
+                        override fun after(param: HookParam) {
                             if (destroyed || param.hasThrowable()) return
                             val holder = param.args?.getOrNull(1) ?: return
                             val row = modernConversationRows[holder]?.get() ?: return
@@ -598,8 +599,8 @@ private class HomeTextColorRuntime(
     private fun installLayoutInflaterHook(method: Method?): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                override fun after(param: HookParam) {
                     if (destroyed || param.hasThrowable()) return
                     val view = param.result as? View ?: return
                     if (viewAnchor(view) !in FIXED_CONTACT_ENTRY_ANCHORS) return
@@ -756,15 +757,15 @@ private class HomeTextColorRuntime(
     private fun installRecyclerAdapterHook(method: Method?, label: String): Boolean {
         if (method == null) return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                override fun before(param: HookParam) {
                     findRootView(param.args?.getOrNull(0))?.let {
                         deferredConversationRows.remove(it)
                         restoreRow(it)
                     }
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     if (destroyed || param.hasThrowable()) return
                     val root = findRootView(param.args?.getOrNull(0)) ?: return
                     val kind = resolveRecyclerRowKind(root) ?: run {

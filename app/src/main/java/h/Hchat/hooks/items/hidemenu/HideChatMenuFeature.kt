@@ -1,7 +1,8 @@
 package h.Hchat.hooks.items.hidemenu
 
 import android.view.MenuItem
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import de.robv.android.xposed.callbacks.XCallback
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.message.SingleMessageMenuLocator
@@ -80,8 +81,8 @@ private class HideChatMenuRuntime(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook(XCallback.PRIORITY_HIGHEST) {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback(XCallback.PRIORITY_HIGHEST) {
+                override fun after(param: HookParam) {
                     hideConfiguredItems(param.args?.getOrNull(0))
                 }
             })

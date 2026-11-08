@@ -11,7 +11,8 @@ import android.text.style.ClickableSpan
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.R
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
@@ -96,8 +97,8 @@ private class MessageTextColorRenderer(
             return false
         }
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     applyTextColor(param)
                 }
             })
@@ -109,7 +110,7 @@ private class MessageTextColorRenderer(
         }
     }
 
-    private fun applyTextColor(param: XC_MethodHook.MethodHookParam) {
+    private fun applyTextColor(param: HookParam) {
         val args = param.args ?: return
         if (args.size < 2) return
         val holder = args[0] ?: return
