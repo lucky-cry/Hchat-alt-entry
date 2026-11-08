@@ -16,7 +16,7 @@ import java.lang.reflect.Member
 interface HookParam {
     val executable: java.lang.reflect.Member?
     val thisObject: Any?
-    val args: Array<Any?>?
+    val args: Array<Any?>
     var result: Any?
     var throwable: Throwable?
 }
@@ -50,7 +50,7 @@ class LegacyHookEngine : HookEngine {
     private class LegacyHookParam(private val param: XC_MethodHook.MethodHookParam) : HookParam {
         override val executable: java.lang.reflect.Member? get() = param.method
         override val thisObject: Any? get() = param.thisObject
-        override val args: Array<Any?>? get() = param.args as? Array<Any?>
+        override val args: Array<Any?> get() = param.args as? Array<Any?> ?: arrayOfNulls(0)
         override var result: Any?
             get() = param.result
             set(value) {
