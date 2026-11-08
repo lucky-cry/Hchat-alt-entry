@@ -64,6 +64,9 @@ public class WeChatNetworkDispatcher {
             log("网络队列候选类无合适方法可Hook: " + classes.size());
         } else if (hooked > 0) {
             log("网络队列补装Hook: classes=" + classes.size() + " methods=" + hooked);
+            h.Hchat.utils.HLog.e("[Hchat:NetQueue] Hook成功: "
+                    + (netQueueClass != null ? netQueueClass.getName() : "candidates")
+                    + " methods=" + hooked);
         }
     }
 
@@ -375,10 +378,15 @@ public class WeChatNetworkDispatcher {
 
     private void cacheDispatcher(Object instance, Method method, String reason) {
         if (instance == null || method == null) return;
+        boolean changed = instance != dispatcherInstance || method != dispatcherMethod;
         dispatcherInstance = instance;
         dispatcherMethod = method;
         dispatcherArgCount = method.getParameterTypes().length;
         log(reason + ": " + instance.getClass().getName() + "#" + method.getName());
+        if (changed) {
+            h.Hchat.utils.HLog.e("[Hchat:NetQueue] 缓存发包器: "
+                    + instance.getClass().getName() + "#" + method.getName());
+        }
     }
 
     private void log(String message) {
