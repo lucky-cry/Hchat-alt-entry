@@ -149,7 +149,7 @@ public final class WeChatDatabaseListenerApi {
         Class<?> wrapperClass = dexFinder != null ? dexFinder.sqliteDbWrapperClass : null;
         // 诊断日志：微信升级后用来区分「wrapper 类没解析到」与「类在但钩子没装上」。
         // 注意：不能走 logger.log，WechatApiFeature 会按关键词过滤掉不含「失败/未就绪」的日志。
-        if (DIAG_LOGS.incrementAndGet() <= 3) {
+        if (wrapperClass == null && DIAG_LOGS.incrementAndGet() <= 3) {
             h.Hchat.utils.HLog.e("[Hchat:DBDiag] install 诊断: available=" + isAvailable()
                     + " classLoader=" + (classLoader != null ? classLoader.getClass().getName() : "null")
                     + " dexFinder=" + (dexFinder != null)
