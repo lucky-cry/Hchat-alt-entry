@@ -10,7 +10,7 @@ import io.github.libxposed.api.XposedModuleInterface
  * `h.Hchat.ModuleEntry`（assets/xposed_init）完成，因此本类暂不加入
  * META-INF/xposed/java_init.list，避免两套入口同时声明。
  */
-class HchatModule : XposedModule {
+class HchatModule : XposedModule() {
 
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
         // 迁移完成后在这里转调 ModuleEntry 的初始化逻辑：
