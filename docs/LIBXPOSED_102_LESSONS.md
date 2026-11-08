@@ -35,7 +35,7 @@ LSPosed 里能看到模块、能勾选作用域，**日志里没有模块输出�
 | 缺 `XposedProvider` | **不是必需**。可用的 102 模块（ForbidAd4TieBa）Manifest 里没有 provider；该 provider 只用于模块配置服务 |
 | `io.github.libxposed:service` 依赖 | 不需要；且它会把 `api` 传递依赖打进来，必须避免（api 只能由框架提供） |
 | legacy `de.robv.android.xposed` 残留 | API 102 规范明确禁止调用，dex 里不能留这类引用 |
-| `staticScope` / `scope.list` | 可用，但若管理器读取异常会表现为"无目标、静默不注入"；排查期建议 `staticScope=false`，用管理器勾选作用域 |
+| `staticScope` / `scope.list` | 可用（最终已恢复 `staticScope=true`，作用域由 `scope.list` 声明 `com.tencent.mm`）；排查期曾临时改成 false 以排除变量 |
 | R8 重命名入口类 | **会踩**：`java_init.list` 按类名加载，必须 `-keep class ...HchatModule { *; }` |
 | 无 R8 包多 dex | 入口可能落在 `classes2+.dex`；不排除加载器只读主 dex 的可能，验证入口建议用 R8 单 dex 包 |
 | LSPosed 版本 | 2.2.1 支持 api=102（日志里 `api=102` 可确认） |
