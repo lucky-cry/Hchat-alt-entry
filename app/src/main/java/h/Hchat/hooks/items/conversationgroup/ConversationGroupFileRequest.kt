@@ -204,7 +204,7 @@ internal class ConversationGroupFileResultHooks(
     private val onResult: (Activity, Int, Int, Intent?) -> Unit,
     private val onHostFailure: ((Activity, Int) -> Unit)? = null
 ) {
-    private val hooks = linkedMapOf<Class<*>, Set<Any>>()
+    private val hooks = linkedMapOf<Class<*>, List<Any>>()
     private val retiredHooks = linkedSetOf<Any>()
     private var generation = 0L
 
@@ -261,7 +261,7 @@ internal class ConversationGroupFileResultHooks(
         val iterator = retiredHooks.iterator()
         while (iterator.hasNext()) {
             val handle = iterator.next()
-            runCatching { handle.unhook() }
+            runCatching { HookRegistry.get().unhookHandle(handle) }
                 .onSuccess { iterator.remove() }
                 .onFailure { HLog.e("[Hchat:ConversationGroup] 卸载文件选择结果 Hook 失败", it) }
         }

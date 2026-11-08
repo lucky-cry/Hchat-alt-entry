@@ -186,7 +186,7 @@ internal object ConversationGroupHomeProjection {
             check(queries.isNotEmpty()) { "旧版首页 Cursor 查询缺失" }
             (queries + changes).forEach { method -> hook(method, object : HookCallback {
                 override fun before(param: HookParam) {
-                    if (!captureRefresh(installation, param.thisObject, Refresh(notice))) return
+                    if (!captureRefresh(installation, param.thisObject ?: return, Refresh(notice))) return
                     enterQuery(installation)
                     legacyDepth.set((legacyDepth.get() ?: 0) + 1)
                 }
@@ -252,7 +252,7 @@ internal object ConversationGroupHomeProjection {
                     if (!isActive(installation)) return
                     if (param.hasThrowable) return
                     updates.firstOrNull { it.declaringClass.isInstance(param.thisObject) }
-                        ?.let { captureRefresh(installation, param.thisObject, Refresh(it)) }
+                        ?.let { captureRefresh(installation, param.thisObject ?: return, Refresh(it)) }
                     val hidden = if (hasTabFilterInQuery()) emptySet() else hiddenIds()
                     if (hidden.isEmpty()) return
                     runCatching {
@@ -298,7 +298,7 @@ internal object ConversationGroupHomeProjection {
         updates.forEach { update -> hook(update, object : HookCallback {
             override fun before(param: HookParam) {
                 val argument = param.args?.getOrNull(0)
-                captureRefresh(installation, param.thisObject, Refresh(
+                captureRefresh(installation, param.thisObject ?: return, Refresh(
                     update,
                     if (update.parameterTypes.size == 3 && argument != null) {
                         WeakReference(argument)
