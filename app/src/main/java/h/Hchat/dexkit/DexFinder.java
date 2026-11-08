@@ -643,6 +643,10 @@ public class DexFinder {
             logDetail("网络队列类: " +
                     (netQueueClass != null ? netQueueClass.getName() : "null")
                     + " candidates=" + netQueueCandidateClasses.size());
+            h.Hchat.utils.HLog.e(TAG + " 网络队列解析: class="
+                    + (netQueueClass != null ? netQueueClass.getName() : "null")
+                    + " candidates=" + netQueueCandidateClasses.size()
+                    + " resolved=" + networkQueueLocatorResolved);
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveQueue 失败: " + e.getMessage(), e);
         }

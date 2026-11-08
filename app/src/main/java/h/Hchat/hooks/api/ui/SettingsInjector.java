@@ -684,7 +684,7 @@ public class SettingsInjector {
             if (launcherClass == null) return;
 
             // Hook onCreate
-            HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onCreate", new Class<?>[0],
+            HookRegistry.get().add(HookRegistry.get().hookMethod(launcherClass, "onCreate", new Class<?>[]{android.os.Bundle.class},
                     new HookCallback() {
                         @Override
                         public void before(HookParam param) {
