@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.membertitle
 import android.text.SpannableStringBuilder
 import android.view.View
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.contact.WeChatChatroomApi
 import h.Hchat.hooks.api.core.WeChatApis
@@ -61,8 +62,8 @@ class MemberTitleRenderer(
         if (usernameBindInstalled) return true
         val method = locateUsernameBindMethod() ?: return false
         return try {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     handleUsernameBind(param)
                 }
             })
@@ -74,7 +75,7 @@ class MemberTitleRenderer(
         }
     }
 
-    private fun handleUsernameBind(param: XC_MethodHook.MethodHookParam) {
+    private fun handleUsernameBind(param: HookParam) {
         if (!store.isEnabled()) return
         val roomId = currentRoomId()
         if (!isRoom(roomId)) return

@@ -19,7 +19,8 @@ import android.widget.Adapter
 import android.widget.AdapterView
 import android.widget.TextView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.api.conversation.WeChatConversationChangeApi
@@ -184,8 +185,8 @@ object ConversationGroupRuntime {
         }
         initializeRuntime(context)
         val generation = lifecycleGeneration.get()
-        val queryInstalled = hook(query, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val queryInstalled = hook(query, object : HookCallback {
+            override fun after(param: HookParam) {
                 if (isExpandingShareRecentQuery()) return
                 captureConversationStorage(param.thisObject, parentUpdate, context.hostContext(), generation)
                 if (!ConversationGroupStore.isEnabled(context.hostContext())) return
@@ -203,20 +204,20 @@ object ConversationGroupRuntime {
         })
         val shareRecentAdapterInstalled = hook(
             shareRecentAdapterReset,
-            object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            object : HookCallback {
+                override fun before(param: HookParam) {
                     enterShareRecentQuery()
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     leaveShareRecentQuery()
                 }
             }
         )
         val shareRecentForwardQueryInstalled = hook(
             shareRecentForwardQuery,
-            object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            object : HookCallback {
+                override fun after(param: HookParam) {
                     if (isExpandingShareRecentQuery() || !isShareRecentQuery() ||
                         !ConversationGroupStore.isEnabled(context.hostContext())
                     ) {
@@ -236,8 +237,8 @@ object ConversationGroupRuntime {
             }
         )
         val clickInstalled = hook(click, groupClickHook())
-        val nativeGroupQueryInstalled = hook(nativeGroupQuery, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val nativeGroupQueryInstalled = hook(nativeGroupQuery, object : HookCallback {
+            override fun before(param: HookParam) {
                 val parent = nativeGroupQueryParent.get()?.takeIf(::isVirtualTalker) ?: return
                 if (param.args?.getOrNull(2) == NATIVE_GROUP_REFRESH_ANCHOR) {
                     param.args[0] = 0
@@ -245,7 +246,7 @@ object ConversationGroupRuntime {
                 }
             }
 
-            override fun afterHookedMethod(param: MethodHookParam) {
+            override fun after(param: HookParam) {
                 val parent = nativeGroupQueryParent.get()?.takeIf(::isVirtualTalker) ?: return
                 val cursor = param.result as? Cursor ?: return
                 val excluded = (param.args?.getOrNull(1) as? List<*>)
@@ -258,20 +259,20 @@ object ConversationGroupRuntime {
             }
         })
         val nativeGroupClickInstalled = hook(nativeGroupClick, nativeGroupClickHook())
-        val nativeGroupRefreshInstalled = hook(nativeGroupRefresh, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val nativeGroupRefreshInstalled = hook(nativeGroupRefresh, object : HookCallback {
+            override fun before(param: HookParam) {
                 nativeGroupQueryParent.remove()
                 nativeGroupAdapterParents[param.thisObject]
                     ?.takeIf(::isVirtualTalker)
                     ?.let(nativeGroupQueryParent::set)
             }
 
-            override fun afterHookedMethod(param: MethodHookParam) {
+            override fun after(param: HookParam) {
                 nativeGroupQueryParent.remove()
             }
         })
-        val nativeGroupMarkReadInstalled = hook(nativeGroupMarkRead, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val nativeGroupMarkReadInstalled = hook(nativeGroupMarkRead, object : HookCallback {
+            override fun before(param: HookParam) {
                 if (isVirtualTalker(param.args?.getOrNull(0) as? String)) {
                     param.result = false
                 }
@@ -290,8 +291,8 @@ object ConversationGroupRuntime {
             nativeHideConversationHook(nativeHideConversation)
         )
         val nativeGroupStatusInstalled = nativeGroupStatusNotify?.let { method ->
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (isVirtualTalker(nativeGroupPageParent.get()) &&
                         param.args?.getOrNull(0) == NATIVE_GROUP_PLACEHOLDER
                     ) {
@@ -304,16 +305,16 @@ object ConversationGroupRuntime {
         nativeGroupMenuMethods?.let { methods ->
             val clickInstalled = hook(
                 methods.click,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                object : HookCallback {
+                    override fun before(param: HookParam) {
                         handleNativeGroupChildMenuClick(param)
                     }
                 }
             )
             val createInstalled = clickInstalled && hook(
                 methods.create,
-                object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                object : HookCallback {
+                    override fun after(param: HookParam) {
                         appendNativeGroupChildMenu(param)
                     }
                 }
@@ -322,8 +323,8 @@ object ConversationGroupRuntime {
                 HLog.e("$TAG 微信原生分组长按菜单 Hook 安装不完整，已保留原生菜单")
             }
         }
-        val conversationMenuInstalled = hook(conversationMenu, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val conversationMenuInstalled = hook(conversationMenu, object : HookCallback {
+            override fun after(param: HookParam) {
                 addConversationGroupMenuItem(param)
             }
         })
@@ -496,9 +497,9 @@ object ConversationGroupRuntime {
         syncAsync(context.hostContext())
     }
 
-    private fun groupClickHook(): XC_MethodHook {
-        return object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+    private fun groupClickHook(): HookCallback {
+        return object : HookCallback {
+            override fun before(param: HookParam) {
                 val adapter = param.args?.getOrNull(0) as? AdapterView<*> ?: return
                 val view = param.args?.getOrNull(1) as? View ?: return
                 val position = param.args?.getOrNull(2) as? Int ?: return
@@ -516,9 +517,9 @@ object ConversationGroupRuntime {
         }
     }
 
-    private fun nativeGroupPinnedHook(context: Context, pinned: Boolean): XC_MethodHook {
-        return object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+    private fun nativeGroupPinnedHook(context: Context, pinned: Boolean): HookCallback {
+        return object : HookCallback {
+            override fun after(param: HookParam) {
                 if (param.result as? Boolean != true) return
                 val talker = param.args?.getOrNull(0) as? String
                 if (!isVirtualTalker(talker)) return
@@ -533,9 +534,9 @@ object ConversationGroupRuntime {
         }
     }
 
-    private fun nativeHideConversationHook(method: Method): XC_MethodHook {
-        return object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+    private fun nativeHideConversationHook(method: Method): HookCallback {
+        return object : HookCallback {
+            override fun before(param: HookParam) {
                 val talker = (param.args?.getOrNull(0) as? String)?.trim().orEmpty()
                 if (talker.isEmpty() || isVirtualTalker(talker)) return
                 val parent = WeChatApis.database()?.queryFirstString(
@@ -558,7 +559,7 @@ object ConversationGroupRuntime {
         }
     }
 
-    private fun addConversationGroupMenuItem(param: XC_MethodHook.MethodHookParam) {
+    private fun addConversationGroupMenuItem(param: HookParam) {
         val menu = param.args?.getOrNull(0) as? ContextMenu ?: return
         val view = param.args?.getOrNull(1) as? View ?: return
         val activity = findActivity(view.context) ?: return
@@ -591,8 +592,8 @@ object ConversationGroupRuntime {
                 candidate.returnType == Void.TYPE &&
                     candidate.declaringClass.name.startsWith("com.tencent.mm.ui.conversation.")
             } ?: return false
-        return hook(method, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        return hook(method, object : HookCallback {
+            override fun before(param: HookParam) {
                 val item = param.args?.getOrNull(0) as? MenuItem ?: return
                 if (item.itemId != MENU_ITEM_ID) return
                 val target = menuBindings.remove(item) ?: return
@@ -660,9 +661,9 @@ object ConversationGroupRuntime {
         }
     }
 
-    private fun nativeGroupClickHook(): XC_MethodHook {
-        return object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+    private fun nativeGroupClickHook(): HookCallback {
+        return object : HookCallback {
+            override fun before(param: HookParam) {
                 val fragment = nativeGroupFragmentFromListener(param.thisObject) ?: return
                 if (!isVirtualGroupFragment(fragment)) return
                 val adapter = param.args?.getOrNull(0) as? AdapterView<*> ?: return
@@ -722,8 +723,8 @@ object ConversationGroupRuntime {
             "getStringExtra",
             String::class.java
         ) ?: return false
-        val parentExtraInstalled = hook(getStringExtra, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        val parentExtraInstalled = hook(getStringExtra, object : HookCallback {
+            override fun before(param: HookParam) {
                 if (param.thisObject.javaClass.name != NATIVE_GROUP_FRAGMENT ||
                     param.args?.getOrNull(0) != CONTACT_USER_EXTRA
                 ) {
@@ -737,20 +738,20 @@ object ConversationGroupRuntime {
                 param.result = talker
             }
         })
-        val lifecycleInstalled = hook(lifecycle, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        val lifecycleInstalled = hook(lifecycle, object : HookCallback {
+            override fun after(param: HookParam) {
                 customizeNativeGroupPage(param.thisObject, context.hostContext())
             }
         })
         val lifecycleContextInstalled = listOf("onPause", "onResume").all { name ->
             val method = KavaReflector.findDeclaredMethod(fragmentClass, name) ?: return@all false
-            hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     nativeGroupPageParent.remove()
                     nativeGroupTalker(param.thisObject)?.let(nativeGroupPageParent::set)
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     try {
                         if (name == "onResume") {
                             // A read update can happen while the child chat is open and
@@ -902,7 +903,7 @@ object ConversationGroupRuntime {
             callback.onItemLongClick(parent, view, position, id)
     }
 
-    private fun appendNativeGroupChildMenu(param: XC_MethodHook.MethodHookParam) {
+    private fun appendNativeGroupChildMenu(param: HookParam) {
         val target = nativeGroupLongClickTarget.get() ?: return
         if (target.talker.isBlank() || isVirtualTalker(target.talker)) return
         val menu = param.args?.getOrNull(0) as? ContextMenu ?: return
@@ -960,7 +961,7 @@ object ConversationGroupRuntime {
         }
     }
 
-    private fun handleNativeGroupChildMenuClick(param: XC_MethodHook.MethodHookParam) {
+    private fun handleNativeGroupChildMenuClick(param: HookParam) {
         val item = param.args?.getOrNull(0) as? MenuItem ?: return
         val binding = nativeGroupMenuBindings.remove(item) ?: return
         param.result = null
@@ -1291,7 +1292,7 @@ object ConversationGroupRuntime {
 
     private fun expandShareRecentQuery(
         method: Method,
-        param: XC_MethodHook.MethodHookParam,
+        param: HookParam,
         parentArgumentIndex: Int,
         groupedIds: Set<String>,
         candidateListArgumentIndex: Int? = null
@@ -2662,7 +2663,7 @@ object ConversationGroupRuntime {
             types[3] == java.lang.Long.TYPE
     }
 
-    private fun hook(method: Method, callback: XC_MethodHook): Boolean {
+    private fun hook(method: Method, callback: HookCallback): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
             HookRegistry.get().hook(method, callback)

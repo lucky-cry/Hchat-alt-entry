@@ -12,7 +12,8 @@ import android.widget.BaseAdapter
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -39,7 +40,7 @@ internal class ForwardedRecordTypeLabels(
     // Values must not strongly retain a descendant of the weak row key.
     private val rows = WeakHashMap<View, RowState>()
     private val adapters = WeakHashMap<BaseAdapter, Boolean>()
-    private var unhook: XC_MethodHook.Unhook? = null
+    private var unhook: Any? = null
     @Volatile private var destroyed = false
     private var lastFailure = 0L
 
@@ -50,14 +51,14 @@ internal class ForwardedRecordTypeLabels(
         if (unhook != null) return true
         return try {
             val targets = locate() ?: return false
-            unhook = HookRegistry.get().hook(targets.bind, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            unhook = HookRegistry.get().hook(targets.bind, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (Looper.myLooper() != Looper.getMainLooper()) return
                     (param.args.getOrNull(1) as? View)?.let(::clearRow)
                 }
 
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (destroyed || param.hasThrowable() || Looper.myLooper() != Looper.getMainLooper()) return
+                override fun after(param: HookParam) {
+                    if (destroyed || param.hasThrowable || Looper.myLooper() != Looper.getMainLooper()) return
                     val row = param.result as? View ?: return
                     clearRow(row)
                     val activity = activity(row.context) ?: return

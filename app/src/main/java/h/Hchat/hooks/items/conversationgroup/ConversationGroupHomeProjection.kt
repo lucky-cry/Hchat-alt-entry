@@ -3,7 +3,8 @@ package h.Hchat.hooks.items.conversationgroup
 import android.database.Cursor
 import android.os.Handler
 import android.os.Looper
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -111,8 +112,8 @@ internal object ConversationGroupHomeProjection {
             DexMethodCache.saveConstructor(prefs, runtime, cacheKey, candidates.single())
             candidates
         }
-        constructors.forEach { constructor -> hook(constructor, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        constructors.forEach { constructor -> hook(constructor, object : HookCallback {
+            override fun before(param: HookParam) {
                 if (!isActive(installation)) return
                 val scope = queryScopes.get()?.lastOrNull() ?: return
                 if (scope.installation != installation) return
@@ -183,13 +184,13 @@ internal object ConversationGroupHomeProjection {
                 it.parameterTypes.isEmpty() && Cursor::class.java.isAssignableFrom(it.returnType)
             }
             check(queries.isNotEmpty()) { "旧版首页 Cursor 查询缺失" }
-            (queries + changes).forEach { method -> hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            (queries + changes).forEach { method -> hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!captureRefresh(installation, param.thisObject, Refresh(notice))) return
                     enterQuery(installation)
                     legacyDepth.set((legacyDepth.get() ?: 0) + 1)
                 }
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     if (queryScopes.get()?.lastOrNull()?.installation != installation) return
                     val depth = (legacyDepth.get() ?: 1) - 1
                     if (depth <= 0) legacyDepth.remove() else legacyDepth.set(depth)
@@ -198,10 +199,10 @@ internal object ConversationGroupHomeProjection {
             }, installation) }
         }
         methods.filter { it.returnType == String::class.java && it.parameterTypes.isEmpty() }.forEach { root ->
-            hook(root, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(root, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!isActive(installation)) return
-                    if ((legacyDepth.get() ?: 0) <= 0 || param.hasThrowable()) return
+                    if ((legacyDepth.get() ?: 0) <= 0 || param.hasThrowable) return
                     val scope = queryScopes.get()?.lastOrNull()?.takeIf { it.installation == installation } ?: return
                     synchronized(lifecycleLock) {
                         if (!isActive(installation)) return
@@ -242,14 +243,14 @@ internal object ConversationGroupHomeProjection {
                 val values = KavaReflector.invokeMethod(native, "convertTo") as? android.content.ContentValues
                 return values?.getAsString("username")
             }
-            hook(page, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            hook(page, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (isActive(installation)) enterQuery(installation)
                 }
-                override fun afterHookedMethod(param: MethodHookParam) {
+                override fun after(param: HookParam) {
                     try {
                     if (!isActive(installation)) return
-                    if (param.hasThrowable()) return
+                    if (param.hasThrowable) return
                     updates.firstOrNull { it.declaringClass.isInstance(param.thisObject) }
                         ?.let { captureRefresh(installation, param.thisObject, Refresh(it)) }
                     val hidden = if (hasTabFilterInQuery()) emptySet() else hiddenIds()
@@ -273,8 +274,8 @@ internal object ConversationGroupHomeProjection {
                     } finally { leaveQuery(installation) }
                 }
             }, installation)
-            hook(visible, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hook(visible, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!isActive(installation)) return
                     if (param.result != true) return
                     val filter = tabFilter()
@@ -294,8 +295,8 @@ internal object ConversationGroupHomeProjection {
                 }
             }, installation)
         }
-        updates.forEach { update -> hook(update, object : XC_MethodHook() {
-            override fun beforeHookedMethod(param: MethodHookParam) {
+        updates.forEach { update -> hook(update, object : HookCallback {
+            override fun before(param: HookParam) {
                 val argument = param.args?.getOrNull(0)
                 captureRefresh(installation, param.thisObject, Refresh(
                     update,
@@ -304,9 +305,9 @@ internal object ConversationGroupHomeProjection {
                     } else null
                 ))
             }
-            override fun afterHookedMethod(param: MethodHookParam) {
+            override fun after(param: HookParam) {
                 if (!isActive(installation)) return
-                if (tabFilter()?.active != true || param.hasThrowable()) return
+                if (tabFilter()?.active != true || param.hasThrowable) return
                 // Native incremental updates may reject folded children before the visibility test.
                 // Reload at most once per burst; never recursively refresh our own type-5 reset.
                 val type = param.args.getOrNull(update.parameterTypes.size - 2) as? Int
@@ -408,7 +409,7 @@ internal object ConversationGroupHomeProjection {
             types[types.size - 2] == Integer.TYPE && types.last() == String::class.java
     }
 
-    private fun hook(method: Member, callback: XC_MethodHook, installation: Installation): Unit = synchronized(lifecycleLock) {
+    private fun hook(method: Member, callback: HookCallback, installation: Installation): Unit = synchronized(lifecycleLock) {
         if (!isActive(installation)) throw CancellationException("首页安装代次已失效")
         if (!installed.add(method)) return
         try { HookRegistry.get().withInstallationGeneration(installation.hooks) { HookRegistry.get().hook(method, callback) } }

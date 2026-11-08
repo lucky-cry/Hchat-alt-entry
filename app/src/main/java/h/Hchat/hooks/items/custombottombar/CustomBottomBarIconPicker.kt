@@ -2,8 +2,9 @@ package h.Hchat.hooks.items.custombottombar
 
 import android.app.Activity
 import android.content.Intent
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookRegistry
+import h.Hchat.hooks.core.HookParam
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -86,8 +87,8 @@ object CustomBottomBarIconPicker {
     private fun hookActivityResult(clazz: Class<*>) {
         if (!resultHookedClasses.add(clazz)) return
         runCatching {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     val request = pending[requestCode] ?: return
                     val activity = request.activity.get()
@@ -139,8 +140,8 @@ object CustomBottomBarIconPicker {
     private fun hookActivityDestroy(clazz: Class<*>) {
         if (!destroyHookedClasses.add(clazz)) return
         runCatching {
-            XposedBridge.hookAllMethods(clazz, "onDestroy", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onDestroy", object : HookCallback {
+                override fun after(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     pending.entries.forEach { entry ->
                         val owner = entry.value.activity.get()

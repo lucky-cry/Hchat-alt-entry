@@ -3,8 +3,9 @@ package h.Hchat.hooks.items.customfriendavatar
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookRegistry
+import h.Hchat.hooks.core.HookParam
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -75,8 +76,8 @@ object CustomFriendAvatarPicker {
     private fun hookActivityResult(clazz: Class<*>) {
         if (!hookedClasses.add(clazz)) return
         runCatching {
-            XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                override fun after(param: HookParam) {
                     val requestCode = param.args.getOrNull(0) as? Int ?: return
                     val result = pending.remove(requestCode) ?: return
                     val resultCode = param.args.getOrNull(1) as? Int ?: return

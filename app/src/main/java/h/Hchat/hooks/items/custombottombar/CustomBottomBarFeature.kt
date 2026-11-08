@@ -38,7 +38,8 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
@@ -288,8 +289,8 @@ private class CustomBottomBarRuntime(
         if (constructors.isEmpty()) return false
         return runCatching {
             constructors.forEach { constructor ->
-                HookRegistry.get().hook(constructor, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(constructor, object : HookCallback {
+                    override fun after(param: HookParam) {
                         observeBottomTab(param.thisObject as? ViewGroup)
                     }
                 })
@@ -310,8 +311,8 @@ private class CustomBottomBarRuntime(
             return
         }
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     val view = param.thisObject as? View ?: return
                     if (!isBottomBlurSuppressed(view.rootView)) return
                     clearBottomBlurView(view, invalidate = false)
@@ -331,8 +332,8 @@ private class CustomBottomBarRuntime(
             exactSetTo).distinctBy(Method::toGenericString)
         return runCatching {
             methods.forEach { method ->
-                HookRegistry.get().hook(method, object : XC_MethodHook() {
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun after(param: HookParam) {
                         val selectedIndex = if (method == exactSetTo) {
                             param.args.getOrNull(0) as? Int
                         } else {
@@ -393,8 +394,8 @@ private class CustomBottomBarRuntime(
                 !Modifier.isAbstract(it.modifiers)
         } ?: return false
         return runCatching {
-            HookRegistry.get().hook(onResume, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(onResume, object : HookCallback {
+                override fun after(param: HookParam) {
                     applyFromActivity(param.thisObject as? Activity)
                 }
             })
@@ -410,8 +411,8 @@ private class CustomBottomBarRuntime(
         if (createHookInstalled) return true
         val method = locateMainTabCreateMethod(allowDexSearch) ?: return false
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     applyFromActivity(findActivity(param.thisObject))
                 }
             })

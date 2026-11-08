@@ -26,7 +26,8 @@ import android.widget.RelativeLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.model.WeChatMessage
@@ -519,8 +520,8 @@ private class HchatExtraHooker(
         for (bind in binds) {
             if (!hookedMethods.add(bind)) continue
             val installed = runCatching {
-                HookRegistry.get().hook(bind, object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
+                HookRegistry.get().hook(bind, object : HookCallback {
+                    override fun before(param: HookParam) {
                         // The payload method belongs to a shared base adapter. Only chat rows apply.
                         if (bind in adapterBinds && adapterClass?.isInstance(param.thisObject) != true) return
                         val state = runCatching {
@@ -534,14 +535,14 @@ private class HchatExtraHooker(
                         stack.addLast(state)
                     }
 
-                    override fun afterHookedMethod(param: MethodHookParam) {
+                    override fun after(param: HookParam) {
                         if (bind in adapterBinds && adapterClass?.isInstance(param.thisObject) != true) return
                         val stack = messageDetailsBindStates.get()
                         val state = stack?.pollLast() ?: MessageDetailsBindState(null)
                         val outer = stack?.lastOrNull { state.root != null && it.root === state.root }
                         if (outer != null && state.message != null) outer.message = state.message
                         if (stack?.isEmpty() == true) messageDetailsBindStates.remove()
-                        if (outer != null || !messageDetailsConfig.enabled || param.hasThrowable()) return
+                        if (outer != null || !messageDetailsConfig.enabled || param.hasThrowable) return
                         runCatching {
                             bindBottomMessageDetails(
                                 param.thisObject, param.args, 0,
@@ -578,11 +579,11 @@ private class HchatExtraHooker(
         return state
     }
 
-    private fun hookOnce(method: Method, block: (XC_MethodHook.MethodHookParam) -> Unit): Boolean {
+    private fun hookOnce(method: Method, block: (HookParam) -> Unit): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     runCatching { block(param) }.onFailure { logger("Hchat扩展Hook执行失败: ${method.name}", it) }
                 }
             })
@@ -594,11 +595,11 @@ private class HchatExtraHooker(
         }
     }
 
-    private fun hookAfterOnce(method: Method, block: (XC_MethodHook.MethodHookParam) -> Unit): Boolean {
+    private fun hookAfterOnce(method: Method, block: (HookParam) -> Unit): Boolean {
         if (!hookedMethods.add(method)) return true
         return runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
                     runCatching { block(param) }.onFailure { logger("Hchat扩展Hook执行失败: ${method.name}", it) }
                 }
             })

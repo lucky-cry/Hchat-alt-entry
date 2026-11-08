@@ -19,7 +19,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.RelativeLayout
 import android.widget.FrameLayout
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -126,20 +127,20 @@ internal object ConversationTabsRuntime {
             HLog.e("$TAG 未找到 MainUI 的唯一 MainUIView 字段，标签分组未安装")
             return false
         }
-        val hooks = arrayListOf<XC_MethodHook.Unhook>()
+        val hooks = arrayListOf<Any>()
         return runCatching {
-            hooks += HookRegistry.get().hook(layout, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (param.hasThrowable() || !clazz.isInstance(param.thisObject)) return
+            hooks += HookRegistry.get().hook(layout, object : HookCallback {
+                override fun after(param: HookParam) {
+                    if (param.hasThrowable || !clazz.isInstance(param.thisObject)) return
                     val original = param.result as? View ?: return
                     clearChangedAccount()
                     ensureHost(param.thisObject, original)
                     reload()
                 }
             })
-            hooks += HookRegistry.get().hook(resume, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
-                    if (param.hasThrowable() || !clazz.isInstance(param.thisObject)) return
+            hooks += HookRegistry.get().hook(resume, object : HookCallback {
+                override fun after(param: HookParam) {
+                    if (param.hasThrowable || !clazz.isInstance(param.thisObject)) return
                     clearChangedAccount()
                     // getLayoutView inflates a NEW root. Read the existing native root instead.
                     val root = KavaReflector.readField(rootField, param.thisObject) as? View
@@ -147,8 +148,8 @@ internal object ConversationTabsRuntime {
                     reload()
                 }
             })
-            hooks += HookRegistry.get().hook(destroy, object : XC_MethodHook() {
-                override fun afterHookedMethod(param: MethodHookParam) {
+            hooks += HookRegistry.get().hook(destroy, object : HookCallback {
+                override fun after(param: HookParam) {
                     if (!clazz.isInstance(param.thisObject)) return
                     hosts.remove(param.thisObject)?.get()?.let { removeHost(it) }
                     if (liveHosts().isEmpty()) synchronized(reloadLock) {

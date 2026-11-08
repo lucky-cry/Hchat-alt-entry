@@ -1,6 +1,7 @@
 package h.Hchat.hooks.items.realtail
 
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
@@ -121,8 +122,8 @@ class BeforeTransferNameQuery(
 
     private fun setupCallbackHook() {
         val method = callbackMethod ?: return
-        HookRegistry.get().hook(method, object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
+        HookRegistry.get().hook(method, object : HookCallback {
+            override fun after(param: HookParam) {
                 val scene = param.thisObject ?: return
                 val callback = pending.remove(scene) ?: return
                 val maskedName = extractMaskedName(scene)

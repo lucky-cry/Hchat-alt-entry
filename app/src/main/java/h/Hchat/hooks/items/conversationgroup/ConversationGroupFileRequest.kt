@@ -6,8 +6,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookRegistry
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.utils.HLog
 import java.lang.ref.WeakReference
 import java.util.concurrent.ArrayBlockingQueue
@@ -203,8 +204,8 @@ internal class ConversationGroupFileResultHooks(
     private val onResult: (Activity, Int, Int, Intent?) -> Unit,
     private val onHostFailure: ((Activity, Int) -> Unit)? = null
 ) {
-    private val hooks = linkedMapOf<Class<*>, Set<XC_MethodHook.Unhook>>()
-    private val retiredHooks = linkedSetOf<XC_MethodHook.Unhook>()
+    private val hooks = linkedMapOf<Class<*>, Set<Any>>()
+    private val retiredHooks = linkedSetOf<Any>()
     private var generation = 0L
 
     @Synchronized
@@ -215,14 +216,14 @@ internal class ConversationGroupFileResultHooks(
             var clazz: Class<*>? = activityClass
             while (clazz != null && Activity::class.java.isAssignableFrom(clazz)) {
                 if (!hooks.containsKey(clazz)) {
-                    val handles = XposedBridge.hookAllMethods(clazz, "onActivityResult", object : XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
+                    val handles = HookRegistry.get().hookAllMethods(clazz, "onActivityResult", object : HookCallback {
+                        override fun after(param: HookParam) {
                             val owner = param.thisObject as? Activity ?: return
                             val code = param.args.getOrNull(0) as? Int ?: return
                             val result = param.args.getOrNull(1) as? Int ?: Activity.RESULT_CANCELED
                             synchronized(this@ConversationGroupFileResultHooks) {
                                 if (generation == installingGeneration) {
-                                    if (param.hasThrowable() && onHostFailure != null) {
+                                    if (param.hasThrowable && onHostFailure != null) {
                                         runCatching { onHostFailure(owner, code) }
                                             .onFailure { HLog.e("[Hchat:ConversationGroup] 取消失败的文件结果请求异常", it) }
                                     } else {

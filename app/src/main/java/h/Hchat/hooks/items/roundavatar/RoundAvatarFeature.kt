@@ -9,7 +9,8 @@ import android.graphics.Paint
 import android.graphics.Shader
 import android.graphics.drawable.Icon
 import android.widget.ImageView
-import de.robv.android.xposed.XC_MethodHook
+import h.Hchat.hooks.core.HookCallback
+import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.core.BaseFeature
@@ -114,8 +115,8 @@ private class RoundAvatarRuntime(
     private fun hookRadius(member: Member, radiusIndex: Int, maskIndex: Int): Boolean {
         if (hookedMembers.contains(member)) return true
         return runCatching {
-            HookRegistry.get().hook(member, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(member, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!RoundAvatarSettings.enabled(context.hostContext())) return
                     if (radiusIndex !in param.args.indices) return
                     param.args[radiusIndex] = RoundAvatarSettings.radiusFactor(context.hostContext())
@@ -141,8 +142,8 @@ private class RoundAvatarRuntime(
         ) ?: return
         if (!notificationHookedMembers.add(method)) return
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!RoundAvatarSettings.enabled(context.hostContext())) return
                     val source = param.args.firstOrNull() as? Bitmap ?: return
                     param.args[0] = RoundAvatarBitmapProcessor.round(
@@ -165,8 +166,8 @@ private class RoundAvatarRuntime(
         ) ?: return
         if (!notificationHookedMembers.add(method)) return
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!RoundAvatarSettings.enabled(context.hostContext())) return
                     val icon = param.args.firstOrNull() as? Icon ?: return
                     val source = KavaReflector.invokeMethod(icon, "getBitmap") as? Bitmap ?: return
@@ -186,8 +187,8 @@ private class RoundAvatarRuntime(
     private fun hookNotificationPost(method: Method?) {
         if (method == null || !notificationHookedMembers.add(method)) return
         runCatching {
-            HookRegistry.get().hook(method, object : XC_MethodHook() {
-                override fun beforeHookedMethod(param: MethodHookParam) {
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
                     if (!RoundAvatarSettings.enabled(context.hostContext())) return
                     val notification = param.args.firstOrNull { it is Notification } as? Notification ?: return
                     val source = notification.largeIcon ?: return
