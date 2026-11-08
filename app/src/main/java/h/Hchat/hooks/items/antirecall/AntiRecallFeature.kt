@@ -3,7 +3,6 @@ package h.Hchat.hooks.items.antirecall
 import android.content.ContentValues
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
-import de.robv.android.xposed.XposedBridge
 import h.Hchat.dexkit.DexMethodCache
 import h.Hchat.event.Events
 import h.Hchat.hooks.api.core.WeChatApis
