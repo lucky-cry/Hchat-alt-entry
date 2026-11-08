@@ -16,7 +16,12 @@ import io.github.libxposed.api.XposedModuleInterface
  */
 class HchatModule : XposedModule() {
 
+    init {
+        Log.i(TAG102, "HchatModule 已实例化")
+    }
+
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
+        Log.i(TAG102, "onModuleLoaded 触发，framework=" + frameworkName)
         // 先注入 102 引擎，避免任何 legacy 类被加载。
         h.Hchat.hooks.core.HookRegistry.get().setEngine(
             h.Hchat.hooks.core.LibxposedHookEngine(this)
@@ -31,6 +36,7 @@ class HchatModule : XposedModule() {
     }
 
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
+        Log.i(TAG102, "onPackageReady 触发: " + param.packageName)
         if (!param.packageName.startsWith(WECHAT_PKG)) return
         val process = currentProcessName() ?: param.packageName
         if (process != param.packageName && !process.startsWith("${param.packageName}:appbrand")) return
@@ -59,6 +65,7 @@ class HchatModule : XposedModule() {
     }.getOrNull()
 
     companion object {
+        private const val TAG102 = "HCHAT102"
         private const val WECHAT_PKG = "com.tencent.mm"
     }
 }
