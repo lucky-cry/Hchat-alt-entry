@@ -57,7 +57,10 @@ public class WeChatNetworkDispatcher {
         int hooked = netQueueClass != null
                 ? hookQueueClasses(Collections.singletonList(netQueueClass))
                 : hookQueueClasses(new ArrayList<>(classes));
-        if (hooked == 0 && netQueueClass != null) {
+        // 只有主类一个方法都没 Hook 上时才扫候选类。
+        // 主类已 Hook 过时 hooked 也会是 0，此时再扫候选类会多挂一批无关方法，
+        // 日志还会误报成 “s1 methods=6”。
+        if (hooked == 0 && netQueueClass != null && !hasHookedQueueMethod(netQueueClass)) {
             hooked = hookQueueClasses(new ArrayList<>(classes));
         }
         if (hooked == 0 && hookedQueueMethods.isEmpty()) {
@@ -68,6 +71,17 @@ public class WeChatNetworkDispatcher {
                     + (netQueueClass != null ? netQueueClass.getName() : "candidates")
                     + " methods=" + hooked);
         }
+    }
+
+    private boolean hasHookedQueueMethod(Class<?> queueClass) {
+        if (queueClass == null) return false;
+        try {
+            for (Method method : KavaReflector.declaredMethods(queueClass)) {
+                if (hookedQueueMethods.contains(method)) return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     private int hookQueueClasses(List<Class<?>> classes) {
