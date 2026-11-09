@@ -46,8 +46,7 @@ public class WechatApiFeature implements Feature {
 
     @Override
     public void install(FeatureContext context) throws Throwable {
-        WeChatNetworkDispatcher dispatcher = new WeChatNetworkDispatcher(this::log);
-        WeChatApis.installNetworkDispatcher(dispatcher);
+        WeChatNetworkDispatcher dispatcher = WeChatApis.networkDispatcher(this::log);
         WeChatConfigApi configApi = new WeChatConfigApi(context.hostContext(), this::log);
         WeChatNetworkApi networkApi = new WeChatNetworkApi(dispatcher, this::log);
         WeChatDatabaseApi databaseApi = new WeChatDatabaseApi(context.dexFinder(), this::log);

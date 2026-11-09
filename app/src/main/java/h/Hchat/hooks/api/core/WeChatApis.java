@@ -200,9 +200,17 @@ public final class WeChatApis {
         return networkApi;
     }
 
-    /** 共享同一个网络队列 Hook 实例，避免红包与公共 API 重复 Hook s1。 */
-    public static void installNetworkDispatcher(WeChatNetworkDispatcher dispatcher) {
-        networkDispatcher = dispatcher;
+    /**
+     * 共享同一个网络队列 Hook 实例，避免红包与公共 API 重复 Hook s1。
+     * RedPacketHooker 在 onInit 阶段就可能构造，早于 WechatApiFeature.install，
+     * 因此这里用 getOrCreate，而不是由 install 阶段最后注入。
+     */
+    public static synchronized WeChatNetworkDispatcher networkDispatcher(
+            WeChatNetworkDispatcher.Logger logger) {
+        if (networkDispatcher == null) {
+            networkDispatcher = new WeChatNetworkDispatcher(logger);
+        }
+        return networkDispatcher;
     }
 
     public static WeChatNetworkDispatcher networkDispatcher() {
