@@ -99,9 +99,10 @@ internal class FinderFeedDetailResolver private constructor(
     companion object {
         private const val TAG = "[Hchat:FinderDetail]"
         private const val PREFS_NAME = "Hchat_finder_feed_detail_cache"
-        private const val CACHE_CONSTRUCTOR = "request_constructor_v2"
-        private const val CACHE_CALLBACK = "request_callback_v2"
+        private const val CACHE_CONSTRUCTOR = "request_constructor_v3"
+        private const val CACHE_CALLBACK = "request_callback_v3"
         private const val CGI_URI = "/cgi-bin/micromsg-bin/findergetcommentdetail"
+        private const val KNOWN_REQUEST_CLASS = "th2.g4"
         private const val FINDER_OBJECT_CLASS = "com.tencent.mm.protocal.protobuf.FinderObject"
         private const val FEED_OBJECT_FIELD_INDEX = 2
         private const val REF_OBJECT_LIST_FIELD_INDEX = 10
@@ -160,10 +161,24 @@ internal class FinderFeedDetailResolver private constructor(
             }.onFailure {
                 HLog.e("$TAG DexKit定位视频号详情请求失败: ${it.message}", it)
             }.getOrDefault(emptyList())
+            if (candidates.size == 1) return candidates.single()
+            // DexKit 对 8.0.80 这个 30+ 参数的 Kotlin 构造器返回 0；
+            // 类名和构造器形状已经人工确认，直接用反射兜底。
+            knownRequestConstructor(context)?.let { return it }
             if (candidates.size != 1) {
                 HLog.e("$TAG 视频号详情请求候选数量异常: count=${candidates.size}")
             }
             return candidates.singleOrNull()
+        }
+
+        private fun knownRequestConstructor(context: FeatureContext): Constructor<*>? {
+            return runCatching {
+                Class.forName(
+                    KNOWN_REQUEST_CLASS,
+                    false,
+                    context.hostClassLoader()
+                ).declaredConstructors.singleOrNull(::isRequestConstructor)
+            }.getOrNull()
         }
 
         private fun isRequestConstructor(constructor: Constructor<*>): Boolean {
@@ -208,16 +223,22 @@ internal class FinderFeedDetailResolver private constructor(
         }
 
         private fun isCallbackMethod(method: Method, owner: Class<*>): Boolean {
+            if (method.declaringClass != owner || method.returnType != Void.TYPE) return false
             val types = method.parameterTypes
-            return method.declaringClass == owner &&
-                method.returnType == Void.TYPE &&
-                types.size == 6 &&
+            val legacy = types.size == 6 &&
                 types[0] == java.lang.Integer.TYPE &&
                 types[1] == java.lang.Integer.TYPE &&
                 types[2] == java.lang.Integer.TYPE &&
                 types[3] == String::class.java &&
                 !types[4].isPrimitive &&
                 types[5] == ByteArray::class.java
+            val current = types.size == 5 &&
+                types[0] == java.lang.Integer.TYPE &&
+                types[1] == java.lang.Integer.TYPE &&
+                types[2] == String::class.java &&
+                !types[3].isPrimitive &&
+                !types[4].isPrimitive
+            return legacy || current
         }
 
         private fun installCallbackHook(method: Method): Boolean {
@@ -227,13 +248,19 @@ internal class FinderFeedDetailResolver private constructor(
                     override fun after(param: HookParam) {
                         val scene = param.thisObject ?: return
                         val request = pending.remove(scene) ?: return
-                        val errType = (param.args.getOrNull(1) as? Number)?.toInt() ?: -1
-                        val errCode = (param.args.getOrNull(2) as? Number)?.toInt() ?: -1
+                        // 8.0.80: (int errType, int errCode, String errMsg, Response, Queue)
+                        // 旧版:   (int scene, int errType, int errCode, String errMsg, Response, byte[])
+                        val legacy = param.args.size >= 6
+                        val errType = (param.args.getOrNull(if (legacy) 1 else 0) as? Number)?.toInt() ?: -1
+                        val errCode = (param.args.getOrNull(if (legacy) 2 else 1) as? Number)?.toInt() ?: -1
                         if (errType == 0 && errCode == 0) {
+                            val callbackResponse = param.args.getOrNull(if (legacy) 4 else 3)
+                            val callbackBytes = (param.args.getOrNull(if (legacy) 5 else 4) as? ByteArray)
+                                ?: responseBytes(callbackResponse)
                             request.finderObject = extractFinderObject(
                                 scene,
-                                param.args.getOrNull(4),
-                                param.args.getOrNull(5) as? ByteArray,
+                                callbackResponse,
+                                callbackBytes,
                                 request.feedId
                             )
                             if (request.finderObject == null) {
@@ -253,6 +280,15 @@ internal class FinderFeedDetailResolver private constructor(
                 HLog.e("$TAG Hook视频号详情响应失败: ${it.message}", it)
                 false
             }
+        }
+
+        private fun responseBytes(response: Any?): ByteArray? {
+            if (response == null) return null
+            return runCatching {
+                KavaReflector.invokeMethod(response, "toByteArray") as? ByteArray
+            }.getOrNull() ?: runCatching {
+                KavaReflector.invokeMethod(response, "getData") as? ByteArray
+            }.getOrNull()
         }
 
         private fun extractFinderObject(

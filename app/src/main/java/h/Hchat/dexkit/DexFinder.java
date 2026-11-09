@@ -42,7 +42,7 @@ public class DexFinder {
     private static final String CACHE_COMPLETE = "cache.complete";
     private static final String CACHE_KEY = "cache.key";
     private static final String CACHE_SNAPSHOT_VERSION_KEY = "cache.snapshot.version";
-    private static final String CACHE_SNAPSHOT_VERSION = "4";
+    private static final String CACHE_SNAPSHOT_VERSION = "5";
     private static final String SEND_TEXT_LOCATOR_VERSION_KEY = "send.text.locator.version";
     private static final String SEND_TEXT_LOCATOR_VERSION = "1";
     private static final String CACHE_SEND_TEXT_LOCATOR_RESOLVED = "locator.send.text.resolved";
@@ -438,10 +438,53 @@ public class DexFinder {
                 collectMethodOwnerClass(methods2, addMsgClasses);
             }
 
+            // 8.0.80 已移除 dkAddMsg/processAddMsg 字符串。
+            // MsgInfoStorage.I1(String, MsgInfo) 是实际入库入口，MsgInfo 具备
+            // e/f/h/i/m 等 AddMsg 字段，可作为稳定兜底。
+            if (addMsgClasses.isEmpty()) {
+                addKnownAddMsgClass("com.tencent.mm.storage.x7");
+            }
+
             logDetail("AddMsg类: " + addMsgClasses.size());
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveAddMsg 失败: " + e.getMessage(), e);
         }
+    }
+
+    private void addKnownAddMsgClass(String className) {
+        Class<?> clazz = KavaReflector.loadClass(className, classLoader);
+        if (clazz == null) return;
+        for (Method method : KavaReflector.declaredMethods(clazz)) {
+            for (Class<?> param : method.getParameterTypes()) {
+                if (isAddMsgLikeClass(param)) {
+                    if (!addMsgClasses.contains(clazz)) addMsgClasses.add(clazz);
+                    return;
+                }
+            }
+        }
+    }
+
+    private boolean isAddMsgLikeClass(Class<?> clazz) {
+        return clazz != null
+                && !clazz.isPrimitive()
+                && !clazz.isArray()
+                && clazz != String.class
+                && hasFieldRecursive(clazz, "e")
+                && hasFieldRecursive(clazz, "f")
+                && (hasFieldRecursive(clazz, "h")
+                || hasFieldRecursive(clazz, "i")
+                || hasFieldRecursive(clazz, "m"));
+    }
+
+    private boolean hasFieldRecursive(Class<?> clazz, String name) {
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            for (java.lang.reflect.Field field : KavaReflector.declaredFields(current)) {
+                if (name.equals(field.getName())) return true;
+            }
+            current = current.getSuperclass();
+        }
+        return false;
     }
 
     // ============ 收红包 ============
@@ -1881,7 +1924,7 @@ public class DexFinder {
         try {
             if (emojiSendMethod == null) {
                 List<MethodData> methods = dexKit.findMethod(
-                        mkMethodUsingStrings("NetSceneUploadEmoji: msgId"));
+                        mkMethodUsingStrings("NetSceneUploadEmoji: msgId = %s, md5 %s, len %s"));
                 for (MethodData methodData : methods) {
                     try {
                         Method method = methodData.getMethodInstance(classLoader);
@@ -1895,7 +1938,8 @@ public class DexFinder {
 
             if (emojiManagerSendMethod == null) {
                 List<MethodData> methods = dexKit.findMethod(
-                        mkMethodUsingStrings("sendEmoji: context is null", "sendEmoji: emoji not found"));
+                        mkMethodUsingStrings("sendEmoji: context is null",
+                                "sendEmoji: emoji not found, imgPath %s"));
                 for (MethodData methodData : methods) {
                     try {
                         Method method = methodData.getMethodInstance(classLoader);
@@ -2852,11 +2896,11 @@ public class DexFinder {
             }
             if (!isContactMuteMethod(contactMuteEnableMethod)) {
                 contactMuteEnableMethod = findUniqueMethodUsingString(
-                        "setMute contact invalid username");
+                        "setMute contact invalid username: %s, contactId: %s");
             }
             if (!isContactMuteMethod(contactMuteDisableMethod)) {
                 contactMuteDisableMethod = findUniqueMethodUsingString(
-                        "unSetMute contact invalid username");
+                        "unSetMute contact invalid username: %s, contactId: %s");
             }
             if (!isContactMuteStateMethod(contactMuteStateMethod, contactMuteEnableMethod)) {
                 contactMuteStateMethod = findContactMuteStateMethod();
@@ -2947,7 +2991,7 @@ public class DexFinder {
         Class<?> contactType = mute.getParameterTypes()[0];
         List<Method> invokes = new ArrayList<>();
         for (MethodData data : dexKit.findMethod(
-                mkMethodUsingStrings("setMute contact invalid username"))) {
+                mkMethodUsingStrings("setMute contact invalid username: %s, contactId: %s"))) {
             try {
                 Method candidate = data.getMethodInstance(classLoader);
                 if (!mute.equals(candidate)) continue;

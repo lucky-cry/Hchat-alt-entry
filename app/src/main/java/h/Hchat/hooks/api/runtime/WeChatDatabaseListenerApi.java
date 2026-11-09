@@ -149,6 +149,13 @@ public final class WeChatDatabaseListenerApi {
 
     public synchronized void install() {
         Class<?> wrapperClass = dexFinder != null ? dexFinder.sqliteDbWrapperClass : null;
+        // wrapper 可能因为 DexKit 预热晚于本方法执行而暂时为 null。
+        // 这里主动补解析一次，而不是等下一轮重试；否则消息变更监听会永久停在
+        // wrapper=null，连带 input_hint、LinkParse、聊天分组都不可用。
+        if (wrapperClass == null && dexFinder != null) {
+            dexFinder.resolveDatabaseApi();
+            wrapperClass = dexFinder.sqliteDbWrapperClass;
+        }
         // 诊断日志：微信升级后用来区分「wrapper 类没解析到」与「类在但钩子没装上」。
         // 注意：不能走 logger.log，WechatApiFeature 会按关键词过滤掉不含「失败/未就绪」的日志。
         if (wrapperClass == null && DIAG_LOGS.incrementAndGet() <= 3) {

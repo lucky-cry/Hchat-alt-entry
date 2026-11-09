@@ -546,6 +546,13 @@ private class HomeTextColorRuntime(
         DexMethodCache.clear(methodPrefs, runtimeKey, CACHE_LAYOUT_INFLATER_FACTORY)
         if (!allowDexSearch) return null
 
+        // 8.0.80 的 LayoutInflater.Factory2 实现在 com.tencent.mm.ui.kd。
+        // DexKit 的 onCreateView 查询在该版本返回 0，先用已知类兜底。
+        knownLayoutInflaterFactory()?.let { method ->
+            DexMethodCache.save(methodPrefs, runtimeKey, CACHE_LAYOUT_INFLATER_FACTORY, method)
+            return method
+        }
+
         val candidates = runCatching {
             context.dexKitBridge().findMethod(
                 FindMethod().apply {
@@ -580,6 +587,17 @@ private class HomeTextColorRuntime(
             )
         }
         return method
+    }
+
+    private fun knownLayoutInflaterFactory(): Method? {
+        return runCatching {
+            val clazz = Class.forName(
+                "com.tencent.mm.ui.kd",
+                false,
+                context.hostClassLoader()
+            )
+            clazz.declaredMethods.singleOrNull(::isLayoutInflaterFactoryMethod)
+        }.getOrNull()
     }
 
     private fun isLayoutInflaterFactoryMethod(method: Method): Boolean {
