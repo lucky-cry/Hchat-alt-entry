@@ -336,6 +336,14 @@ public class DexFinder {
                 resolveNetworkQueue();
                 repaired = true;
             }
+            if (ecsGiftTaskClass == null || ecsGiftServiceClass == null || ecsGiftMsgClass == null) {
+                // 旧快照可能把 ecsGiftLocatorResolved=true 和三个 null 一起缓存，
+                // 导致自动抢礼物永久跳过。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少 ECS 礼物类，补解析一次");
+                ecsGiftLocatorResolved = false;
+                resolveEcsGiftApi();
+                repaired = true;
+            }
             if (!isSendTextLocatorCacheCurrent()) {
                 resolveSendTextMsg();
                 repaired = true;
@@ -5859,11 +5867,28 @@ public class DexFinder {
                     ecsGiftTaskClass = task;
                     ecsGiftServiceClass = svc;
                     ecsGiftMsgClass = msg;
-                    logDetail("ECS礼物静默类: task=" + task.getName() + " svc=" + svc.getName() + " msg=" + msg.getName());
+                    h.Hchat.utils.HLog.e(TAG + " ECS礼物静默类: task="
+                            + task.getName() + " svc=" + svc.getName()
+                            + " msg=" + msg.getName());
                     return;
                 }
             }
-            logDetail("ECS礼物静默类未定位到");
+            // 8.0.80 已确认：task=w20.j1，service=w20.k1，msg=com.tencent.mm.storage.f9。
+            // 字符串查询失败时直接按构造器 (service, msg) 兜底。
+            Class<?> knownTask = KavaReflector.loadClass("w20.j1", classLoader);
+            Class<?> knownService = KavaReflector.loadClass("w20.k1", classLoader);
+            Class<?> knownMsg = KavaReflector.loadClass("com.tencent.mm.storage.f9", classLoader);
+            if (knownTask != null && knownService != null && knownMsg != null
+                    && KavaReflector.findConstructor(knownTask, knownService, knownMsg) != null) {
+                ecsGiftTaskClass = knownTask;
+                ecsGiftServiceClass = knownService;
+                ecsGiftMsgClass = knownMsg;
+                h.Hchat.utils.HLog.e(TAG + " ECS礼物静默类(已知): task="
+                        + knownTask.getName() + " svc=" + knownService.getName()
+                        + " msg=" + knownMsg.getName());
+                return;
+            }
+            h.Hchat.utils.HLog.e(TAG + " ECS礼物静默类未定位到");
             ecsGiftLocatorResolved = true;
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveEcsGiftApi 失败: " + e.getMessage(), e);
