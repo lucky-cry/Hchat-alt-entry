@@ -151,7 +151,7 @@ public final class WeChatConversationApi {
             return false;
         }
         try {
-            KavaReflector.invokeOrThrow(method, null, contact, Boolean.TRUE);
+            KavaReflector.invokeOrThrow(method, null, contact, enabled);
             return true;
         } catch (Throwable e) {
             log("私聊免打扰设置失败: " + e.getMessage()

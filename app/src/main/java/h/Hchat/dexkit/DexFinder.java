@@ -2945,11 +2945,12 @@ public class DexFinder {
     }
 
     public boolean isPrivateConversationMuteApiReady() {
-        return isServiceGetterMethod(serviceGetterMethod)
-                && isContactMuteMethod(contactMuteEnableMethod)
-                && isContactMuteMethod(contactMuteDisableMethod)
-                && isContactMuteStateMethod(contactMuteStateMethod, contactMuteEnableMethod)
-                && isContactStorageLookupApiReady();
+        // 设置免打扰只需要 enable/disable 两个静态方法；联系人由
+        // WeChatConversationApi 通过 ContactApi 传入，不再强依赖
+        // contactStorage 查询和状态方法。8.0.80 的 s0 方法体已经不再
+        // 通过旧的 contactStorage getter/query 组合，强依赖会永久未就绪。
+        return isContactMuteMethod(contactMuteEnableMethod)
+                && isContactMuteMethod(contactMuteDisableMethod);
     }
 
     private Method findUniqueMethodUsingString(String anchor) {
