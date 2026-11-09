@@ -462,7 +462,11 @@ public class DexFinder {
                 addKnownAddMsgClass("com.tencent.mm.storage.x7");
             }
 
-            logDetail("AddMsg类: " + addMsgClasses.size());
+            if (addMsgClasses.isEmpty()) {
+                h.Hchat.utils.HLog.e(TAG + " AddMsg类仍未找到");
+            } else {
+                h.Hchat.utils.HLog.e(TAG + " AddMsg类: " + joinClassNames(addMsgClasses));
+            }
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveAddMsg 失败: " + e.getMessage(), e);
         }
@@ -471,37 +475,11 @@ public class DexFinder {
     private void addKnownAddMsgClass(String className) {
         Class<?> clazz = KavaReflector.loadClass(className, classLoader);
         if (clazz == null) return;
-        for (Method method : KavaReflector.declaredMethods(clazz)) {
-            for (Class<?> param : method.getParameterTypes()) {
-                if (isAddMsgLikeClass(param)) {
-                    if (!addMsgClasses.contains(clazz)) addMsgClasses.add(clazz);
-                    return;
-                }
-            }
+        // x7 在 8.0.80 已确认是 MsgInfoStorage：I1(String, yk.l6) 入库。
+        // 直接加入，不再依赖字段反射；Gift/MessageBlock 会自行检查参数形状。
+        if (!addMsgClasses.contains(clazz)) {
+            addMsgClasses.add(clazz);
         }
-    }
-
-    private boolean isAddMsgLikeClass(Class<?> clazz) {
-        return clazz != null
-                && !clazz.isPrimitive()
-                && !clazz.isArray()
-                && clazz != String.class
-                && hasFieldRecursive(clazz, "e")
-                && hasFieldRecursive(clazz, "f")
-                && (hasFieldRecursive(clazz, "h")
-                || hasFieldRecursive(clazz, "i")
-                || hasFieldRecursive(clazz, "m"));
-    }
-
-    private boolean hasFieldRecursive(Class<?> clazz, String name) {
-        Class<?> current = clazz;
-        while (current != null && current != Object.class) {
-            for (java.lang.reflect.Field field : KavaReflector.declaredFields(current)) {
-                if (name.equals(field.getName())) return true;
-            }
-            current = current.getSuperclass();
-        }
-        return false;
     }
 
     // ============ 收红包 ============
@@ -2070,6 +2048,7 @@ public class DexFinder {
                 }
             }
 
+            h.Hchat.utils.HLog.e(TAG + " 表情发送方法: " + methodName(emojiSendMethod));
             logDetail("表情发送API: send=" + methodName(emojiSendMethod)
                     + " managerSend=" + methodName(emojiManagerSendMethod)
                     + " getByMd5=" + methodName(emojiGetByMd5Method)

@@ -67,8 +67,14 @@ private class GameEmojiRuntime(
     @Synchronized
     fun install(): Boolean {
         if (installed) return true
-        val method = context.dexFinder().emojiSendMethod ?: return false
-        if (!isEmojiSendMethod(method)) return false
+        val method = context.dexFinder().emojiSendMethod ?: run {
+            logger("游戏表情发送方法未找到", null)
+            return false
+        }
+        if (!isEmojiSendMethod(method)) {
+            logger("游戏表情发送方法形状不匹配: ${method.declaringClass.name}#${method.name}", null)
+            return false
+        }
         val fields = resolveEmojiFields(method.parameterTypes[1]) ?: return false
         emojiFields = fields
         return runCatching {
