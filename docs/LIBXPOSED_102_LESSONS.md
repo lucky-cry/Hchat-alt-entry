@@ -148,3 +148,21 @@ Android 17 / 微信 8.0.80 / LSPosed 2.2.1 实测：
 
 普通红包的 Union 回退还需要收一个真实红包后看
 `普通红包请求类缺失，回退 Union 请求` 与后续 `静默收包` / `拆红包请求已发送`。
+
+## 七、P1/P2 优化（2026-11-09）
+
+只做性能/代码质量，不改已确定的 P0 安全策略：
+
+- `HchatMediaDownloader` 视频号解密缓冲从 32MB 降到 64KB，避免单次下载
+  32MB 内存峰值。
+- `DexFinder.resolveNetworkQueue()` 已知 `modelbase.s1` 命中后直接返回，
+  不再执行 15 个锚点 DexKit 查询；后续仍保留锚点/形状兜底。
+- `WeChatApis` 共享同一个 `WeChatNetworkDispatcher`，红包与公共 API 不再
+  各自 Hook 一次 `s1`。
+- `WeChatNetworkDispatcher` 的实例/方法/候选字段改为 volatile。
+- `HomeTextColor` 布局入口定位失败后只记录一次并停止重复 DexKit 查询；
+  `GiftMessageHook` 消息类缺失日志只打一次。
+- GitHub Actions 从 `@v4/@v3` 改为固定 commit SHA。
+
+未做：拆分 `DexFinder` / `MiuixSettingsPage` / `ScriptPluginAgentClient`
+等超大文件，以及 R8 keep 收紧，避免一次改动引入回归。

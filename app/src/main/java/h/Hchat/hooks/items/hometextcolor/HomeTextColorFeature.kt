@@ -118,6 +118,7 @@ private class HomeTextColorRuntime(
     @Volatile private var contactsInstalled = false
     @Volatile private var preferenceInstalled = false
     @Volatile private var layoutInflaterInstalled = false
+    @Volatile private var layoutInflaterResolveFailed = false
     @Volatile private var recyclerInstalled = false
     @Volatile private var recyclerPayloadInstalled = false
     @Volatile private var destroyed = false
@@ -535,6 +536,7 @@ private class HomeTextColorRuntime(
         runtimeKey: String,
         allowDexSearch: Boolean
     ): Method? {
+        if (layoutInflaterResolveFailed) return null
         DexMethodCache.load(
             methodPrefs,
             runtimeKey,
@@ -571,6 +573,7 @@ private class HomeTextColorRuntime(
         if (method != null) {
             DexMethodCache.save(methodPrefs, runtimeKey, CACHE_LAYOUT_INFLATER_FACTORY, method)
         } else {
+            layoutInflaterResolveFailed = true
             HLog.e(
                 "$TAG 未找到唯一微信布局创建入口: count=${candidates.size} " +
                     "methods=${candidates.joinToString(transform = ::methodDescriptor)}"

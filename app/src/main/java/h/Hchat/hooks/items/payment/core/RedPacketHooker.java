@@ -87,7 +87,10 @@ public class RedPacketHooker {
         this.announcer = new RedPacketAnnouncer(context, settings, formatter, this::logx);
         this.newGroupBlocker = new RedPacketNewGroupBlocker(settings, this::logx);
         this.filter = new RedPacketFilter(settings);
-        this.networkDispatcher = new WeChatNetworkDispatcher(this::logx);
+        WeChatNetworkDispatcher sharedDispatcher = WeChatApis.networkDispatcher();
+        this.networkDispatcher = sharedDispatcher != null
+                ? sharedDispatcher
+                : new WeChatNetworkDispatcher(this::logx);
         this.messageHook = new RedPacketMessageHook(
                 dexFinder,
                 settings,

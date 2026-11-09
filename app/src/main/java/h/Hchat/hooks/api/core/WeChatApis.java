@@ -6,6 +6,7 @@ import h.Hchat.hooks.api.media.*;
 import h.Hchat.hooks.api.message.*;
 import h.Hchat.hooks.api.model.WeChatMessageTypes;
 import h.Hchat.hooks.api.net.WeChatNetworkApi;
+import h.Hchat.hooks.api.net.WeChatNetworkDispatcher;
 import h.Hchat.hooks.api.payment.WeChatTransferApi;
 import h.Hchat.hooks.api.runtime.*;
 import h.Hchat.hooks.api.sns.WeChatSnsApi;
@@ -31,6 +32,7 @@ public final class WeChatApis {
     private static volatile WeChatNotifyApi notifyApi;
     private static volatile WeChatConfigApi configApi;
     private static volatile WeChatNetworkApi networkApi;
+    private static volatile WeChatNetworkDispatcher networkDispatcher;
     private static volatile WeChatUserApi userApi;
     private static volatile WeChatChatroomApi chatroomApi;
     private static volatile WeChatStorageApi storageApi;
@@ -196,6 +198,15 @@ public final class WeChatApis {
 
     public static WeChatNetworkApi network() {
         return networkApi;
+    }
+
+    /** 共享同一个网络队列 Hook 实例，避免红包与公共 API 重复 Hook s1。 */
+    public static void installNetworkDispatcher(WeChatNetworkDispatcher dispatcher) {
+        networkDispatcher = dispatcher;
+    }
+
+    public static WeChatNetworkDispatcher networkDispatcher() {
+        return networkDispatcher;
     }
 
     public static WeChatUserApi users() {
@@ -479,6 +490,7 @@ public final class WeChatApis {
         notifyApi = null;
         configApi = null;
         networkApi = null;
+        networkDispatcher = null;
         userApi = null;
         chatroomApi = null;
         storageApi = null;

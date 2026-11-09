@@ -29,10 +29,10 @@ public class WeChatNetworkDispatcher {
     }
 
     private final Logger logger;
-    private Object dispatcherInstance;
-    private Method dispatcherMethod;
-    private int dispatcherArgCount = 1;
-    private List<Class<?>> queueCandidateClasses = Collections.emptyList();
+    private volatile Object dispatcherInstance;
+    private volatile Method dispatcherMethod;
+    private volatile int dispatcherArgCount = 1;
+    private volatile List<Class<?>> queueCandidateClasses = Collections.emptyList();
     private final Set<Method> hookedQueueMethods = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public WeChatNetworkDispatcher(Logger logger) {

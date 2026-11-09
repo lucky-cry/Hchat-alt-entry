@@ -614,13 +614,25 @@ public class DexFinder {
         try {
             collectKnownNetworkQueueClasses();
 
+            // 已知队列类（8.0.80 的 modelbase.s1）命中后直接结束，
+            // 不再跑 15 个 DexKit 锚点查询。
+            for (Class<?> candidate : netQueueCandidateClasses) {
+                if (isVerifiedQueueClassCandidate(candidate)) {
+                    netQueueClass = candidate;
+                    h.Hchat.utils.HLog.e(TAG + " 网络队列候选命中: " + candidate.getName());
+                    logNetworkQueueResolution();
+                    return;
+                }
+            }
+
             // 先按真实红包请求类型筛选，避免 doSceneImp 的普通业务类抢到首位。
             collectNetworkQueueClassesByAnchors();
             for (Class<?> candidate : netQueueCandidateClasses) {
-                if (isQueueClassCandidate(candidate)) {
+                if (isVerifiedQueueClassCandidate(candidate)) {
                     netQueueClass = candidate;
                     h.Hchat.utils.HLog.e(TAG + " 网络队列候选命中: " + candidate.getName());
-                    break;
+                    logNetworkQueueResolution();
+                    return;
                 }
             }
 
@@ -683,23 +695,26 @@ public class DexFinder {
                 }
             }
 
-            networkQueueLocatorResolved = netQueueClass != null
-                    && isQueueClassCandidate(netQueueClass);
-
-            logDetail("网络队列类: " +
-                    (netQueueClass != null ? netQueueClass.getName() : "null")
-                    + " candidates=" + netQueueCandidateClasses.size());
-            h.Hchat.utils.HLog.e(TAG + " 网络队列解析: class="
-                    + (netQueueClass != null ? netQueueClass.getName() : "null")
-                    + " candidates=" + netQueueCandidateClasses.size()
-                    + " resolved=" + networkQueueLocatorResolved
-                    + " receive=" + (receiveLuckyMoneyClass != null)
-                    + " receiveUnion=" + (receiveLuckyMoneyUnionClass != null)
-                    + " open=" + (openLuckyMoneyClass != null)
-                    + " openUnion=" + (openLuckyMoneyUnionClass != null));
+            logNetworkQueueResolution();
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " resolveQueue 失败: " + e.getMessage(), e);
         }
+    }
+
+    private void logNetworkQueueResolution() {
+        networkQueueLocatorResolved = netQueueClass != null
+                && isVerifiedQueueClassCandidate(netQueueClass);
+        logDetail("网络队列类: " +
+                (netQueueClass != null ? netQueueClass.getName() : "null")
+                + " candidates=" + netQueueCandidateClasses.size());
+        h.Hchat.utils.HLog.e(TAG + " 网络队列解析: class="
+                + (netQueueClass != null ? netQueueClass.getName() : "null")
+                + " candidates=" + netQueueCandidateClasses.size()
+                + " resolved=" + networkQueueLocatorResolved
+                + " receive=" + (receiveLuckyMoneyClass != null)
+                + " receiveUnion=" + (receiveLuckyMoneyUnionClass != null)
+                + " open=" + (openLuckyMoneyClass != null)
+                + " openUnion=" + (openLuckyMoneyUnionClass != null));
     }
 
     // ============ 祝福语 ============
@@ -5581,6 +5596,11 @@ public class DexFinder {
      */
     private boolean isQueueClassCandidate(Class<?> cl) {
         if (cl != null && "com.tencent.mm.modelbase.s1".equals(cl.getName())) return true;
+        return cl != null && isVerifiedQueueClassCandidate(cl);
+    }
+
+    /** 真正按方法形状验证，避免未来 s1 被复用成其它类时误判。 */
+    private boolean isVerifiedQueueClassCandidate(Class<?> cl) {
         return cl != null && (hasQueueSendMethodForRequests(cl) || hasQueueLikeDispatchMethod(cl));
     }
 

@@ -178,7 +178,7 @@ object HchatMediaDownloader {
         original.inputStream().use { input ->
             output.outputStream().use { out ->
                 val cryptoState = CryptoState(key)
-                val buffer = ByteArray(32 * 1024 * 1024)
+                val buffer = ByteArray(64 * 1024)
                 var remaining = FINDER_VIDEO_DECRYPT_BYTES
                 while (true) {
                     val read = input.read(buffer)

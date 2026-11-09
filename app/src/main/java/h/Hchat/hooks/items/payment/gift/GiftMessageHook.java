@@ -29,6 +29,7 @@ public class GiftMessageHook {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Set<String> processedOrders = new LinkedHashSet<>();
     private final List<Object> subscriptions = new ArrayList<>();
+    private boolean missingMessageClassLogged = false;
 
     public GiftMessageHook(DexFinder dexFinder, GiftSettings settings, GiftSilentHandler handler,
                            GiftSilentHandler.Logger logger) {
@@ -40,7 +41,10 @@ public class GiftMessageHook {
 
     public List<Object> hook() {
         if (dexFinder == null || dexFinder.addMsgClasses == null || dexFinder.addMsgClasses.isEmpty()) {
-            log("未找到消息类，跳过礼物监听");
+            if (!missingMessageClassLogged) {
+                missingMessageClassLogged = true;
+                log("未找到消息类，跳过礼物监听");
+            }
             return subscriptions;
         }
 
