@@ -831,7 +831,23 @@ private class HomeTextColorRuntime(
         ) {
             return RowKind.CONTACTS
         }
+        // 8.0.80 首页普通会话的资源 id 与旧版不同，recyclerAnchorMask
+        // 经常识别不到 title/subtitle/time 三个锚点。首页的普通会话
+        // 至少有标题和摘要两段文字，用这个形状兜底，避免只有服务号/
+        // 微信运动等固定入口被着色。
+        if (isLauncherPage(row.context) && looksLikeConversationRow(row)) {
+            return RowKind.CONVERSATION
+        }
         return null
+    }
+
+    private fun looksLikeConversationRow(row: View): Boolean {
+        val candidates = collectCandidates(row)
+        // 普通会话通常有标题、摘要、时间三段；用 3 段避免把发现/我
+        // 里只有标题+副标题的偏好项误判成会话。
+        if (candidates.size < 3) return false
+        val maxSize = candidates.maxOfOrNull { it.textSize } ?: return false
+        return maxSize >= 14f
     }
 
     private fun recyclerAnchorMask(view: View): Int {
