@@ -311,12 +311,12 @@ public class DexFinder {
             if (emojiSendMethod == null) {
                 // 8.0.80 的 emoji 锚点曾经变化，旧快照可能缓存了 null。
                 h.Hchat.utils.HLog.e(TAG + " 缓存缺少 emojiSendMethod，补解析一次");
-                resolveSendEmojiApi();
+                resolveSendEmojiApi(true);
                 repaired = true;
             }
             if (!isPrivateConversationMuteApiReady()) {
                 h.Hchat.utils.HLog.e(TAG + " 原生免打扰 API 未就绪，补解析一次");
-                resolveConversationMuteApi();
+                resolveConversationMuteApi(true);
                 repaired = true;
             }
             if (!receiveUnionLocatorResolved || !openUnionLocatorResolved) {
@@ -1915,7 +1915,12 @@ public class DexFinder {
     }
 
     public void resolveSendEmojiApi() {
-        if (ensureSnapshotLoaded()) return;
+        resolveSendEmojiApi(false);
+    }
+
+    public void resolveSendEmojiApi(boolean force) {
+        // 命中旧快照时默认跳过；缓存修复必须用 force=true 真正重跑。
+        if (!force && ensureSnapshotLoaded()) return;
         try {
             if (emojiSendMethod == null) {
                 List<MethodData> methods = dexKit.findMethod(
@@ -2899,7 +2904,12 @@ public class DexFinder {
     }
 
     public void resolveConversationMuteApi() {
-        if (ensureSnapshotLoaded()) return;
+        resolveConversationMuteApi(false);
+    }
+
+    public void resolveConversationMuteApi(boolean force) {
+        // 命中旧快照时默认跳过；缓存修复必须用 force=true 真正重跑。
+        if (!force && ensureSnapshotLoaded()) return;
         try {
             if (!isServiceGetterMethod(serviceGetterMethod)) {
                 resolveServiceManagerApi();
