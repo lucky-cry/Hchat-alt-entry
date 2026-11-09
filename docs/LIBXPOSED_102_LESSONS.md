@@ -193,6 +193,16 @@ Android 17 / 微信 8.0.80 / LSPosed 2.2.1 实测：
 - **私聊免打扰**：`setMute` / `unSetMute` 日志带 `: %s, contactId: %s`，
   旧锚点缺少格式后缀，DexKit 精确匹配失败；已更新完整字符串。
 
+- **首页普通会话文字颜色**：8.0.80 首页普通会话的资源 id 与旧版不同，
+  `recyclerAnchorMask` 识别不到标题/摘要/时间三锚点。`WxRecyclerAdapter`
+  绑定后，如果当前是 LauncherUI 且行内至少有三段文字，按 `CONVERSATION`
+  兜底处理。
+- **私聊免打扰**：只需要 `w41.e2.s0(z3, boolean)` 的 enable/disable；
+  旧 `contactStorageGetter/query` 在 8.0.80 已变化，不能作为硬性就绪条件。
+- **ECS 礼物**：实际 task/service/msg 是 `w20.j1` / `w20.k1` /
+  `com.tencent.mm.storage.f9`；旧快照把 `ecsGiftLocatorResolved=true` 和
+  null 类一起缓存时，命中缓存也要补解析。
+
 缓存快照版本升到 `6`，首次启动会重建一次 DexKit 快照；同时在命中缓存时
-对空 AddMsg、null `emojiSendMethod`、未就绪免打扰 API 做一次补解析，避免
-旧快照把失败结果永久缓存。
+对空 AddMsg、null `emojiSendMethod`、未就绪免打扰 API、null ECS 礼物类
+做一次补解析，避免旧快照把失败结果永久缓存。
