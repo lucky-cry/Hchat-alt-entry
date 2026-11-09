@@ -206,16 +206,28 @@ internal class FinderFeedDetailResolver private constructor(
             args[1] = objectNonceId
             args[2] = scene
             args[3] = identity
+            // Kotlin 的 30+ 参数构造器末尾是 (int mask, DefaultConstructorMarker)。
+            // mask 全 1 时由 Kotlin 自己填充所有可选参数，避免给非空对象传 null。
+            val markerIndex = params.indexOfLast {
+                !it.isPrimitive && it.name.startsWith("kotlin.jvm.internal.")
+            }
+            val maskIndex = if (markerIndex > 4 && params[markerIndex - 1] == java.lang.Integer.TYPE) {
+                markerIndex - 1
+            } else {
+                -1
+            }
             for (index in 4 until params.size) {
-                args[index] = when (params[index]) {
-                    java.lang.Boolean.TYPE -> false
-                    java.lang.Integer.TYPE -> 0
-                    java.lang.Long.TYPE -> 0L
-                    java.lang.Short.TYPE -> 0.toShort()
-                    java.lang.Byte.TYPE -> 0.toByte()
-                    java.lang.Float.TYPE -> 0f
-                    java.lang.Double.TYPE -> 0.0
-                    String::class.java -> ""
+                args[index] = when {
+                    index == maskIndex -> -1
+                    index == markerIndex -> null
+                    params[index] == java.lang.Boolean.TYPE -> false
+                    params[index] == java.lang.Integer.TYPE -> 0
+                    params[index] == java.lang.Long.TYPE -> 0L
+                    params[index] == java.lang.Short.TYPE -> 0.toShort()
+                    params[index] == java.lang.Byte.TYPE -> 0.toByte()
+                    params[index] == java.lang.Float.TYPE -> 0f
+                    params[index] == java.lang.Double.TYPE -> 0.0
+                    params[index] == String::class.java -> ""
                     else -> null
                 }
             }
