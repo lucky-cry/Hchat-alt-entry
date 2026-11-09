@@ -193,4 +193,6 @@ Android 17 / 微信 8.0.80 / LSPosed 2.2.1 实测：
 - **私聊免打扰**：`setMute` / `unSetMute` 日志带 `: %s, contactId: %s`，
   旧锚点缺少格式后缀，DexKit 精确匹配失败；已更新完整字符串。
 
-缓存快照版本升到 `5`，首次启动会重建一次 DexKit 快照；之后恢复正常缓存。
+缓存快照版本升到 `6`，首次启动会重建一次 DexKit 快照；同时在命中缓存时
+对空 AddMsg、null `emojiSendMethod`、未就绪免打扰 API 做一次补解析，避免
+旧快照把失败结果永久缓存。
