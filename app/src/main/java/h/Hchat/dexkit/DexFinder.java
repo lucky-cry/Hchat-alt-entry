@@ -42,7 +42,7 @@ public class DexFinder {
     private static final String CACHE_COMPLETE = "cache.complete";
     private static final String CACHE_KEY = "cache.key";
     private static final String CACHE_SNAPSHOT_VERSION_KEY = "cache.snapshot.version";
-    private static final String CACHE_SNAPSHOT_VERSION = "5";
+    private static final String CACHE_SNAPSHOT_VERSION = "6";
     private static final String SEND_TEXT_LOCATOR_VERSION_KEY = "send.text.locator.version";
     private static final String SEND_TEXT_LOCATOR_VERSION = "1";
     private static final String CACHE_SEND_TEXT_LOCATOR_RESOLVED = "locator.send.text.resolved";
@@ -300,6 +300,23 @@ public class DexFinder {
                 // 旧快照可能把「解析失败」也缓存了，这里补一次，避免消息变更监听永久失效。
                 h.Hchat.utils.HLog.e(TAG + " 缓存缺少 sqliteWrapper，补解析一次");
                 resolveDatabaseApiInternal();
+                repaired = true;
+            }
+            if (addMsgClasses == null || addMsgClasses.isEmpty()) {
+                // 旧快照可能把空 AddMsg 列表缓存下来；补一次，避免礼物/屏蔽消息永久失效。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少 AddMsg 类，补解析一次");
+                resolveAddMsgClasses();
+                repaired = true;
+            }
+            if (emojiSendMethod == null) {
+                // 8.0.80 的 emoji 锚点曾经变化，旧快照可能缓存了 null。
+                h.Hchat.utils.HLog.e(TAG + " 缓存缺少 emojiSendMethod，补解析一次");
+                resolveSendEmojiApi();
+                repaired = true;
+            }
+            if (!isPrivateConversationMuteApiReady()) {
+                h.Hchat.utils.HLog.e(TAG + " 原生免打扰 API 未就绪，补解析一次");
+                resolveConversationMuteApi();
                 repaired = true;
             }
             if (!receiveUnionLocatorResolved || !openUnionLocatorResolved) {
