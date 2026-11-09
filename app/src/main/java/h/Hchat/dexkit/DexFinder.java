@@ -1931,6 +1931,20 @@ public class DexFinder {
                 }
             }
 
+            if (emojiSendMethod == null) {
+                // 8.0.80 的发送入口在 com.tencent.mm.feature.emoji.b0，
+                // 字符串查询失效时直接按方法形状兜底。
+                Class<?> emojiSender = KavaReflector.loadClass(
+                        "com.tencent.mm.feature.emoji.b0", classLoader);
+                if (emojiSender != null) {
+                    for (Method method : KavaReflector.declaredMethods(emojiSender)) {
+                        if (!isEmojiSendMethod(method)) continue;
+                        emojiSendMethod = KavaReflector.accessible(method);
+                        break;
+                    }
+                }
+            }
+
             if (emojiManagerSendMethod == null) {
                 List<MethodData> methods = dexKit.findMethod(
                         mkMethodUsingStrings("sendEmoji: context is null",
