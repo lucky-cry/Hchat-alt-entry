@@ -166,3 +166,31 @@ Android 17 / 微信 8.0.80 / LSPosed 2.2.1 实测：
 
 未做：拆分 `DexFinder` / `MiuixSettingsPage` / `ScriptPluginAgentClient`
 等超大文件，以及 R8 keep 收紧，避免一次改动引入回归。
+
+## 八、微信 8.0.80 失效功能定位（2026-11-09）
+
+用用户提供的 `weixin8080android3220_0x28005032_arm64.apk` 做 dex 反查后确认：
+
+- **DB wrapper**：`ai5.d0` 同时具备 insert/update/delete 形状；但初始化时
+  `WeChatDatabaseListenerApi` 可能早于 DexKit 补解析执行，导致 `wrapper=null`。
+  现在 `install()` 内主动调用 `resolveDatabaseApi()` 补解析，避免消息变更、
+  input_hint、LinkParse、聊天分组永久未就绪。
+- **AddMsg**：8.0.80 已没有 `dkAddMsg` / `processAddMsg` 字符串。
+  实际入库入口是 `com.tencent.mm.storage.x7.I1(String, yk.l6)`，
+  `yk.l6` 继承 `lm.i5`，具备 `e/f/h/i/m` 字段。`DexFinder` 增加 x7 兜底，
+  修复自动抢礼物、屏蔽消息等 AddMsg 钩子。
+- **HomeTextColor**：布局创建入口是
+  `com.tencent.mm.ui.kd.onCreateView(String, Context, AttributeSet)`。
+  DexKit 查询在 8.0.80 返回 0，增加已知类反射兜底。
+- **视频号详情**：请求类是 `th2.g4`，CGI 仍是
+  `/cgi-bin/micromsg-bin/findergetcommentdetail`；构造器末尾是 Kotlin
+  默认参数 `(int mask, DefaultConstructorMarker)`，构造时 mask 全 1。
+  回调从旧 6 参 `(scene, errType, errCode, msg, resp, bytes)` 变为
+  5 参 `(errType, errCode, msg, resp, queue)`，两种都兼容。
+- **表情发送**：`NetSceneUploadEmoji` 日志改为
+  `NetSceneUploadEmoji: msgId = %s, md5 %s, len %s`；
+  `sendEmoji` 日志改为 `sendEmoji: emoji not found, imgPath %s`。
+- **私聊免打扰**：`setMute` / `unSetMute` 日志带 `: %s, contactId: %s`，
+  旧锚点缺少格式后缀，DexKit 精确匹配失败；已更新完整字符串。
+
+缓存快照版本升到 `5`，首次启动会重建一次 DexKit 快照；之后恢复正常缓存。
