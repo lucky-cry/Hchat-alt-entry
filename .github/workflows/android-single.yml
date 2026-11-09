@@ -8,7 +8,9 @@ permissions:
 
 env:
   HCAT_SINGLE_VERSION_NAME_BASE: "6.4.1"
-  HCAT_SINGLE_VERSION_CODE_BASE: "600"
+  # 正式版 versionCode 必须高于 test.* 测试包（600 + 运行号），
+  # 否则已装测试包无法直接覆盖安装正式版。正式版从 1000 起。
+  HCAT_SINGLE_VERSION_CODE_BASE: "1000"
   HCAT_SINGLE_RUN_NUMBER_BASE: "0"
 
 jobs:
