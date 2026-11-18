@@ -14,6 +14,8 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.recyclerview.widget.RecyclerView
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
@@ -38,6 +40,9 @@ internal object ConversationGroupClickBridge {
 
     private val installedViews = Collections.newSetFromMap(WeakHashMap<RecyclerView, Boolean>())
     private val activeOverlays = Collections.synchronizedMap(WeakHashMap<Activity, View>())
+    private val backCallbacks = Collections.synchronizedMap(
+        WeakHashMap<Activity, OnBackPressedCallback>()
+    )
     @Volatile private var installed = false
 
     /** 在 ModuleEntry.bootstrap 阶段调用：早于微信首页 RecyclerView 创建。 */
@@ -215,6 +220,7 @@ internal object ConversationGroupClickBridge {
 
     private fun removeGroupPage(activity: Activity?): Boolean {
         activity ?: return false
+        backCallbacks.remove(activity)?.remove()
         val view = activeOverlays.remove(activity) ?: return false
         (view.parent as? ViewGroup)?.removeView(view)
         return true
@@ -408,8 +414,8 @@ internal object ConversationGroupClickBridge {
                 setTextColor(Color.rgb(32, 32, 32))
                 setPadding(dp(6), 0, dp(10), 0)
                 setOnClickListener {
-                    decor.removeView(page)
-                    activeOverlays.remove(activity)
+                    removeGroupPage(activity)
+                    KavaReflector.invokeMethod(activity, "closeChatting", false)
                 }
             }, LinearLayout.LayoutParams(dp(44), dp(52)))
             header.addView(TextView(activity).apply {
@@ -559,6 +565,19 @@ internal object ConversationGroupClickBridge {
             ))
             activeOverlays[activity] = page
             page.bringToFront()
+            backCallbacks.remove(activity)?.remove()
+            val backCallback = object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (removeGroupPage(activity)) {
+                        KavaReflector.invokeMethod(activity, "closeChatting", false)
+                    }
+                }
+            }
+            (activity as? ComponentActivity)?.onBackPressedDispatcher?.addCallback(
+                activity as ComponentActivity,
+                backCallback
+            )
+            backCallbacks[activity] = backCallback
             val observer = decor.viewTreeObserver
             val preDraw = android.view.ViewTreeObserver.OnPreDrawListener {
                 activeOverlays[activity]?.bringToFront()

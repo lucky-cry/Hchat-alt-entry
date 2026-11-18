@@ -127,6 +127,7 @@ dependencies {
     implementation("androidx.navigationevent:navigationevent:1.1.2")
     implementation("androidx.navigationevent:navigationevent-compose:1.1.2")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.activity:activity:1.10.1")
     implementation(files("libs/miuix-ui-android-0.9.4.aar"))
     implementation(files("libs/miuix-core-android-0.9.4.aar"))
     implementation(files("libs/miuix-squircle-android-0.9.4.aar"))
