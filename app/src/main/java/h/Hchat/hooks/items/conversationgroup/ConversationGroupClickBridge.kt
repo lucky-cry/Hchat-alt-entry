@@ -184,9 +184,7 @@ internal object ConversationGroupClickBridge {
         val onEnterEnd = methods.firstOrNull {
             it.name == "onEnterEnd" && it.parameterTypes.isEmpty()
         }
-        val onExitEnd = methods.firstOrNull {
-            it.name == "onExitEnd" && it.parameterTypes.isEmpty()
-        }
+        val onExitEnd: java.lang.reflect.Method? = null
         fun show(proxy: Any) {
             val talker = findVirtualFieldDeep(proxy) ?: return
             val activity = findActivityDeep(proxy)
