@@ -134,8 +134,10 @@ public class ModuleEntry {
                                 HLog.e(TAG + " 标签分组早期安装失败", e);
                             }
                             try {
-                                ConversationGroupClickBridge.INSTANCE.installEarly(
-                                        resolveHostClassLoader(app, lpparam));
+                                ClassLoader groupLoader = resolveHostClassLoader(app, lpparam);
+                                ConversationGroupClickBridge.INSTANCE.installEarly(groupLoader);
+                                ConversationGroupClickBridge.INSTANCE.installChattingRedirect(groupLoader);
+                                ConversationGroupClickBridge.INSTANCE.installChattingFragmentRedirect(groupLoader);
                             } catch (Throwable e) {
                                 HLog.e(TAG + " 聊天分组点击桥早期安装失败", e);
                             }

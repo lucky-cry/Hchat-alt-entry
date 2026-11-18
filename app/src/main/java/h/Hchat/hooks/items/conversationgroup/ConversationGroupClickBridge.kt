@@ -96,6 +96,97 @@ internal object ConversationGroupClickBridge {
         return ok || legacyInstalled
     }
 
+    /** 虚拟分组被当普通会话打开时，ChattingUI 直接转去原生分组页。 */
+    fun installChattingRedirect(classLoader: ClassLoader): Boolean {
+        val chattingClass = KavaReflector.loadClass(CHATTING_UI, classLoader) ?: return false
+        var owner: Class<*>? = chattingClass
+        var onCreate: java.lang.reflect.Method? = null
+        while (owner != null && onCreate == null) {
+            onCreate = KavaReflector.declaredMethods(owner).firstOrNull {
+                it.name == "onCreate" && it.parameterTypes.size == 1
+            }
+            owner = owner.superclass
+        }
+        if (onCreate == null) {
+            HLog.e("$TAG 找不到 ChattingUI.onCreate")
+            return false
+        }
+        return runCatching {
+            HookRegistry.get().hook(onCreate, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val activity = param.thisObject as? Activity ?: return
+                    val talker = activity.intent?.getStringExtra(CHAT_USER) ?: return
+                    if (!talker.startsWith(VIRTUAL_PREFIX)) return
+                    HLog.e("$TAG 拦截虚拟分组会话: talker=$talker")
+                    runCatching {
+                        activity.startActivity(
+                            Intent().setClassName(
+                                activity,
+                                "com.tencent.mm.ui.conversation.ConvBoxServiceConversationUI"
+                            ).putExtra("Contact_User", talker)
+                        )
+                        activity.finish()
+                    }.onFailure {
+                        HLog.e("$TAG 转原生分组页失败: ${it.message}", it)
+                    }
+                }
+            })
+        }.isSuccess
+    }
+
+    /** 新版微信聊天页是 LauncherUI 内的 ChattingUIFragment。 */
+    fun installChattingFragmentRedirect(classLoader: ClassLoader): Boolean {
+        val fragmentClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.chatting.ChattingUIFragment",
+            classLoader
+        ) ?: return false
+        val candidates = KavaReflector.declaredMethods(fragmentClass).filter {
+            it.parameterTypes.size == 1 && it.parameterTypes[0] == android.os.Bundle::class.java
+        }
+        if (candidates.isEmpty()) return false
+        var ok = false
+        candidates.forEach { method ->
+            if (runCatching {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            val fragment = param.thisObject ?: return
+                            val talker = findVirtualField(fragment) ?: return
+                            HLog.e("$TAG 聊天 Fragment 命中虚拟分组: talker=$talker")
+                            val activity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
+                                ?: return
+                            runCatching {
+                                activity.startActivity(
+                                    Intent().setClassName(
+                                        activity,
+                                        "com.tencent.mm.ui.conversation.ConvBoxServiceConversationUI"
+                                    ).putExtra("Contact_User", talker)
+                                )
+                                KavaReflector.invokeMethod(fragment, "finish")
+                            }.onFailure {
+                                HLog.e("$TAG 聊天 Fragment 转分组页失败: ${it.message}", it)
+                            }
+                        }
+                    })
+                }.isSuccess
+            ) ok = true
+        }
+        HLog.e("$TAG 聊天 Fragment 重定向: $ok")
+        return ok
+    }
+
+    private fun findVirtualField(target: Any): String? {
+        var current: Class<*>? = target.javaClass
+        while (current != null && current != Any::class.java) {
+            for (field in KavaReflector.declaredFields(current)) {
+                if (field.type != String::class.java) continue
+                val value = KavaReflector.readField(field, target) as? String ?: continue
+                if (value.startsWith(VIRTUAL_PREFIX)) return value
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
     fun install(context: FeatureContext): Boolean {
         if (installed) return true
         synchronized(this) {
