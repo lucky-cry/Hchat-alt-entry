@@ -2021,7 +2021,11 @@ object ConversationGroupRuntime {
                 }
             }
             val displayedUnread = when (group.unreadCountMode) {
-                ConversationGroupUnreadMode.ALL -> state.unreadCount
+                ConversationGroupUnreadMode.ALL ->
+                    // 全部未读都来自免打扰会话时，分组不再向首页/角标贡献红点。
+                    // 只要还有一条非免打扰未读，仍按全部未读显示。
+                    if (state.unreadCount > 0 && state.mutedUnreadCount >= state.unreadCount) 0
+                    else state.unreadCount
                 ConversationGroupUnreadMode.EXCLUDE_MUTED ->
                     (state.unreadCount - state.mutedUnreadCount).coerceAtLeast(0)
                 ConversationGroupUnreadMode.HIDDEN -> 0

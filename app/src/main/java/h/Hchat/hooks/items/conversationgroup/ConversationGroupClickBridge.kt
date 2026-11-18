@@ -488,7 +488,9 @@ internal object ConversationGroupClickBridge {
             if (ids.isEmpty()) return@runCatching emptyMap()
             val placeholders = ids.joinToString(",") { "?" }
             WeChatApis.database()?.query(
-                "SELECT username, content, conversationTime, unReadCount " +
+                "SELECT username, content, conversationTime, " +
+                    "IFNULL(unReadCount,0) AS unReadCount, " +
+                    "IFNULL(unReadMuteCount,0) AS unReadMuteCount " +
                     "FROM rconversation WHERE username IN ($placeholders)",
                 ids.toTypedArray()
             ).orEmpty().mapNotNull { row ->
@@ -556,7 +558,10 @@ internal object ConversationGroupClickBridge {
                     contacts
                 )
                 val conversationTime = (detail["conversationTime"] as? Number)?.toLong() ?: 0L
-                val unread = (detail["unReadCount"] as? Number)?.toInt() ?: 0
+                val unread = maxOf(
+                    (detail["unReadCount"] as? Number)?.toInt() ?: 0,
+                    (detail["unReadMuteCount"] as? Number)?.toInt() ?: 0
+                )
                 val avatarUrl = contacts?.getAvatarUrl(id).orEmpty()
                 val avatarColor =
                     if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92)
