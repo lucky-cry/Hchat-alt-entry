@@ -170,7 +170,7 @@ internal object ConversationGroupClickBridge {
                                 KavaReflector.invokeMethod(tx, "commit")
                             }
                         }
-                        showGroupDialog(activity, talker)
+                        showGroupPageOverlay(activity, talker)
                     }.onFailure {
                         HLog.e("$TAG Fragment 观察器跳转失败: ${it.message}", it)
                     }
@@ -218,6 +218,221 @@ internal object ConversationGroupClickBridge {
         HLog.e("$TAG 聊天 Fragment 重定向: $ok")
         return ok
     }
+
+    private fun showGroupPageOverlay(activity: Activity, talker: String) {
+        val group = ConversationGroupStore.load(activity)
+            .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
+        val decor = activity.window?.decorView as? ViewGroup ?: return
+        if (activeOverlays.containsKey(activity)) return
+        val contacts = WeChatApis.contact()?.contacts()
+        val rows = group.conversationIds.map { id ->
+            id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
+        }
+        activity.runOnUiThread {
+            val page = FrameLayout(activity).apply {
+                setBackgroundColor(Color.WHITE)
+                isClickable = false
+                setPadding(0, dp(40), 0, 0)
+            }
+            val content = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(Color.WHITE)
+            }
+            val header = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setBackgroundColor(Color.WHITE)
+            }
+            header.addView(TextView(activity).apply {
+                text = "‹"
+                textSize = 32f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(32, 32, 32))
+                setPadding(dp(6), 0, dp(10), 0)
+                setOnClickListener {
+                    decor.removeView(page)
+                    activeOverlays.remove(activity)
+                }
+            }, LinearLayout.LayoutParams(dp(44), dp(52)))
+            header.addView(TextView(activity).apply {
+                text = group.name.ifBlank { "聊天分组" }
+                textSize = 18f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(32, 32, 32))
+            }, LinearLayout.LayoutParams(0, dp(52), 1f))
+            header.addView(View(activity), LinearLayout.LayoutParams(dp(44), dp(1)))
+            content.addView(header, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(64)
+            ))
+            content.addView(View(activity).apply {
+                setBackgroundColor(Color.rgb(235, 235, 235))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1))
+            val list = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(Color.WHITE)
+            }
+            rows.forEach { (id, name) ->
+                val row = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    minimumHeight = dp(68)
+                    isClickable = true
+                    setOnClickListener {
+                        HLog.e("$TAG 点击分组行: id=$id name=$name")
+                        decor.removeView(page)
+                        activeOverlays.remove(activity)
+                        runCatching {
+                            activity.startActivity(
+                                Intent().setClassName(activity, CHATTING_UI).also {
+                                    it.putExtra(CHAT_USER, id)
+                                }
+                            )
+                        }.onFailure {
+                            HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                        }
+                    }
+                }
+                val avatar = TextView(activity).apply {
+                    text = name.take(1)
+                    textSize = 20f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE)
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(
+                            if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92)
+                            else Color.rgb(76, 132, 200)
+                        )
+                    }
+                }
+                row.addView(avatar, LinearLayout.LayoutParams(dp(48), dp(48)))
+                val text = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), 0, 0, 0)
+                }
+                text.addView(TextView(activity).apply {
+                    this.text = name
+                    textSize = 17f
+                    setTextColor(Color.rgb(32, 32, 32))
+                    maxLines = 1
+                })
+                text.addView(TextView(activity).apply {
+                    this.text = if (id.endsWith("@chatroom")) "群聊" else "会话"
+                    textSize = 13f
+                    setTextColor(Color.rgb(150, 150, 150))
+                    setPadding(0, dp(3), 0, 0)
+                })
+                row.addView(text, LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                ))
+                list.addView(row, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ))
+                list.addView(View(activity).apply {
+                    setBackgroundColor(Color.rgb(235, 235, 235))
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1))
+            }
+            content.addView(list, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            ))
+            page.addView(content, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            decor.addView(page, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            activeOverlays[activity] = page
+            HLog.e("$TAG 分组页已显示: ${rows.size} 行")
+        }
+    }
+
+    private fun renderGroupPage(fragment: Any, activity: Activity, talker: String) {
+        val group = ConversationGroupStore.load(activity)
+            .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
+        val root = KavaReflector.invokeMethod(fragment, "getView") as? ViewGroup ?: return
+        if (root.tag == "hchat_group_page") return
+        root.tag = "hchat_group_page"
+        val contacts = WeChatApis.contact()?.contacts()
+        val rows = group.conversationIds.map { id ->
+            id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
+        }
+        root.removeAllViews()
+        root.setBackgroundColor(Color.WHITE)
+        val list = android.widget.ListView(activity).apply {
+            divider = android.graphics.drawable.ColorDrawable(Color.rgb(235, 235, 235))
+            dividerHeight = 1
+            adapter = object : android.widget.BaseAdapter() {
+                override fun getCount() = rows.size
+                override fun getItem(position: Int) = rows[position]
+                override fun getItemId(position: Int) = position.toLong()
+                override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+                    val row = (convertView as? LinearLayout) ?: LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(16), dp(10), dp(16), dp(10))
+                        minimumHeight = dp(68)
+                    }
+                    row.removeAllViews()
+                    val (id, name) = rows[position]
+                    val avatar = TextView(activity).apply {
+                        text = name.take(1)
+                        textSize = 20f
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.WHITE)
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92) else Color.rgb(76, 132, 200))
+                        }
+                    }
+                    row.addView(avatar, LinearLayout.LayoutParams(dp(48), dp(48)))
+                    val text = LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(12), 0, 0, 0)
+                    }
+                    text.addView(TextView(activity).apply {
+                        this.text = name
+                        textSize = 17f
+                        setTextColor(Color.rgb(32, 32, 32))
+                        maxLines = 1
+                    })
+                    text.addView(TextView(activity).apply {
+                        this.text = if (id.endsWith("@chatroom")) "群聊" else "会话"
+                        textSize = 13f
+                        setTextColor(Color.rgb(150, 150, 150))
+                        setPadding(0, dp(3), 0, 0)
+                    })
+                    row.addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    return row
+                }
+            }
+            setOnItemClickListener { _, _, position, _ ->
+                val child = rows.getOrNull(position)?.first ?: return@setOnItemClickListener
+                runCatching {
+                    activity.startActivity(
+                        Intent().setClassName(activity, CHATTING_UI).also {
+                            it.putExtra(CHAT_USER, child)
+                        }
+                    )
+                }.onFailure { HLog.e("$TAG 打开分组会话失败: ${it.message}", it) }
+            }
+        }
+        root.addView(list, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        HLog.e("$TAG 分组页已渲染: ${rows.size} 行")
+    }
+
+    private fun dp(value: Int): Int =
+        (value * android.content.res.Resources.getSystem().displayMetrics.density).toInt()
 
     private fun showGroupDialog(activity: Activity, talker: String) {
         HLog.e("$TAG 准备显示分组列表: talker=$talker")
