@@ -168,30 +168,41 @@ object ConversationGroupRuntime {
     private fun installInternal(context: FeatureContext): Boolean {
         HLog.e("$TAG installInternal 开始")
         val query = locateQueryMethod(context) ?: return installAbort("main_query")
+        HLog.e("$TAG 定位 share_reset")
         val shareRecentAdapterReset = locateShareRecentAdapterResetMethod(context) ?: return installAbort("share_reset")
+        HLog.e("$TAG 定位 share_forward")
         val shareRecentForwardQuery = locateShareRecentForwardQueryMethod(context) ?: return installAbort("share_forward")
+        HLog.e("$TAG 定位 parent_update")
         val parentUpdate = locateParentUpdateMethod(context) ?: return installAbort("parent_update")
+        HLog.e("$TAG 定位 set_pinned")
         val nativeSetPinned = locateNativeSetPinnedMethod(context) ?: return installAbort("set_pinned")
+        HLog.e("$TAG 定位 unset_pinned")
         val nativeUnsetPinned = locateNativeUnsetPinnedMethod(context) ?: return installAbort("unset_pinned")
+        HLog.e("$TAG 定位 hide")
         val nativeHideConversation = locateNativeHideConversationMethod(context) ?: return installAbort("hide")
+        HLog.e("$TAG 定位 click")
         val click = locateClickMethod(context) ?: return installAbort("click")
+        HLog.e("$TAG 定位 group_query")
         val nativeGroupQuery = locateNativeGroupQueryMethod(context) ?: return installAbort("group_query")
+        HLog.e("$TAG 定位 group_click")
         val nativeGroupClick = locateNativeGroupClickMethod(context) ?: return installAbort("group_click")
+        HLog.e("$TAG 定位 group_refresh")
         val nativeGroupRefresh = locateNativeGroupRefreshMethod(context) ?: return installAbort("group_refresh")
+        HLog.e("$TAG 定位 group_mark_read")
         val nativeGroupMarkRead = locateNativeGroupMarkReadMethod(context) ?: return installAbort("group_mark_read")
-        val nativeGroupStatusNotify = locateNativeGroupStatusNotifyMethod(context)
-        val nativeGroupMenuMethods = locateNativeGroupMenuMethods(context)
-        val conversationMenu = ConversationMenuLocator.menuCreateMethod(context) { message, throwable ->
-            HLog.e("$TAG $message", throwable)
-        } ?: return installAbort("conversation_menu")
+        // 8.0.80 上这三项 DexKit 定位会卡住整个安装流程；它们只负责
+        // 原生分组页的状态提示/长按菜单/会话菜单，不属于首页分组核心。
+        // 先跳过，保证首页分组行和点击进入分组可用。
+        HLog.e("$TAG 跳过可选定位: status_notify/menu/conversation_menu")
+        val nativeGroupStatusNotify: Method? = null
+        val nativeGroupMenuMethods: NativeGroupMenuMethods? = null
+        val conversationMenu: Method? = null
         parentUpdateMethod = parentUpdate
         nativeGroupRefreshMethod = nativeGroupRefresh
-        val homeProjectionInstalled = ConversationGroupHomeProjection.install(context) {
-            effectiveConversationSnapshot?.hiddenHomeIds.orEmpty()
-        }
-        if (!homeProjectionInstalled) {
-            HLog.e("$TAG 首页公众号投影 Hook 安装失败，保留原生首页")
-        }
+        // 首页投影在 8.0.80 上会卡在 DexKit 定位；先只安装核心查询/点击
+        // Hook，保证已存在的虚拟分组行可以点击进入分组页。
+        HLog.e("$TAG 跳过首页投影 DexKit 安装")
+        val homeProjectionInstalled = true
         initializeRuntime(context)
         val generation = lifecycleGeneration.get()
         val queryInstalled = hook(query, object : HookCallback {
@@ -333,11 +344,13 @@ object ConversationGroupRuntime {
                 HLog.e("$TAG 微信原生分组长按菜单 Hook 安装不完整，已保留原生菜单")
             }
         }
-        val conversationMenuInstalled = hook(conversationMenu, object : HookCallback {
-            override fun after(param: HookParam) {
-                addConversationGroupMenuItem(param)
-            }
-        })
+        val conversationMenuInstalled = conversationMenu?.let { method ->
+            hook(method, object : HookCallback {
+                override fun after(param: HookParam) {
+                    addConversationGroupMenuItem(param)
+                }
+            })
+        } ?: true
         return homeProjectionInstalled && queryInstalled && shareRecentAdapterInstalled &&
             shareRecentForwardQueryInstalled && (clickInstalled || recyclerClickInstalled) &&
             nativeGroupQueryInstalled && nativeGroupClickInstalled && nativeGroupRefreshInstalled &&
@@ -2256,6 +2269,7 @@ object ConversationGroupRuntime {
     }
 
     private fun locateQueryMethod(context: FeatureContext): Method? {
+        HLog.e("$TAG locateQueryMethod 进入")
         // 8.0.80 的 m4.C 是主会话查询；先用已知方法，避免旧缓存
         // 校验失败后卡在 DexKit 查询。
         val known = runCatching {
@@ -2269,6 +2283,7 @@ object ConversationGroupRuntime {
                 String::class.java
             )
         }.getOrNull()?.takeIf(::isQueryMethod)
+        HLog.e("$TAG locateQueryMethod known=${known != null}")
         if (known != null) return known
         return loadCached(context, CACHE_QUERY, ::isQueryMethod) ?: locateAndCache(
             context,

@@ -88,8 +88,10 @@ class WeChatLocalMessageApi(
             return 0L
         }
         if (!useWechatCreateTime && !installCreateTimeHook()) {
-            log("插入系统消息失败: createTime hook 未就绪")
-            return 0L
+            // 8.0.80 的 createTime 定位可能失败，但系统消息插入方法本身仍可用。
+            // 退回微信自己生成时间，至少保证撤回提示能插入。
+            log("createTime hook 未就绪，改用微信当前时间插入")
+            return insertSystemMessage(talker, content, createTime, true)
         }
         return runCatching {
             insertViaWechatSystemMessageMethod(

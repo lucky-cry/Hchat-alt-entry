@@ -16,6 +16,7 @@ class ConversationGroupFeature : BaseFeature() {
 
     override fun onFeatureInstall(context: FeatureContext) {
         HLog.e("[Hchat:ConversationGroup] onFeatureInstall")
+        ConversationGroupClickBridge.install(context)
         val generation = ConversationGroupRuntime.beginInstall()
         DexInstallScheduler.schedule(ID, name(), stage = DexInstallScheduler.Stage.BRIDGE) {
             if (!ConversationGroupRuntime.isInstallGenerationActive(generation)) {
