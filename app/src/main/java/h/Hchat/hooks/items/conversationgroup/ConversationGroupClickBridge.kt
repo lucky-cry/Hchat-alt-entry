@@ -173,6 +173,66 @@ internal object ConversationGroupClickBridge {
         }.isSuccess
     }
 
+    /** 每次打开聊天都会走 ChattingUIProxy.onInit，用它覆盖第二次及以后打开。 */
+    fun installChattingProxyHook(classLoader: ClassLoader): Boolean {
+        val proxyClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.chatting.ChattingUIProxy",
+            classLoader
+        ) ?: return false
+        val onInit = KavaReflector.declaredMethods(proxyClass).firstOrNull {
+            it.name == "onInit"
+        } ?: return false
+        return runCatching {
+            HookRegistry.get().hook(onInit, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val proxy = param.thisObject ?: return
+                    val talker = findVirtualFieldDeep(proxy) ?: return
+                    val activity = findActivityDeep(proxy)
+                        ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
+                        ?: return
+                    HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
+                    activity.window?.decorView?.postDelayed({
+                        showGroupPageOverlay(activity, talker)
+                        activeOverlays[activity]?.bringToFront()
+                    }, 120L)
+                }
+            })
+        }.isSuccess
+    }
+
+    private fun findVirtualFieldDeep(target: Any, depth: Int = 2): String? {
+        if (depth < 0) return null
+        findVirtualField(target)?.let { return it }
+        var current: Class<*>? = target.javaClass
+        while (current != null && current != Any::class.java) {
+            for (field in KavaReflector.declaredFields(current)) {
+                if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+                if (field.type.isPrimitive || field.type == String::class.java) continue
+                val value = runCatching { KavaReflector.readField(field, target) }.getOrNull() ?: continue
+                if (value is android.app.Activity) continue
+                findVirtualFieldDeep(value, depth - 1)?.let { return it }
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun findActivityDeep(target: Any): Activity? {
+        var current: Class<*>? = target.javaClass
+        while (current != null && current != Any::class.java) {
+            for (field in KavaReflector.declaredFields(current)) {
+                if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+                val value = runCatching { KavaReflector.readField(field, target) }.getOrNull() ?: continue
+                if (value is Activity) return value
+                if (value.javaClass.name.contains("MMFragmentActivity")) {
+                    return value as? Activity
+                }
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
     /** 新版微信聊天页是 LauncherUI 内的 ChattingUIFragment。 */
     fun installChattingFragmentRedirect(classLoader: ClassLoader): Boolean {
         val fragmentClass = KavaReflector.loadClass(
