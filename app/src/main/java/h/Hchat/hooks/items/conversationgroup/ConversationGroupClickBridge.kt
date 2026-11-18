@@ -179,25 +179,57 @@ internal object ConversationGroupClickBridge {
             "com.tencent.mm.ui.chatting.ChattingUIProxy",
             classLoader
         ) ?: return false
-        val onInit = KavaReflector.declaredMethods(proxyClass).firstOrNull {
-            it.name == "onInit"
-        } ?: return false
-        return runCatching {
+        val methods = KavaReflector.declaredMethods(proxyClass)
+        val onInit = methods.firstOrNull { it.name == "onInit" } ?: return false
+        val onEnterEnd = methods.firstOrNull {
+            it.name == "onEnterEnd" && it.parameterTypes.isEmpty()
+        }
+        val onExitEnd = methods.firstOrNull {
+            it.name == "onExitEnd" && it.parameterTypes.isEmpty()
+        }
+        fun show(proxy: Any) {
+            val talker = findVirtualFieldDeep(proxy) ?: return
+            val activity = findActivityDeep(proxy)
+                ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
+                ?: return
+            HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
+            activity.window?.decorView?.postDelayed({
+                showGroupPageOverlay(activity, talker)
+                activeOverlays[activity]?.bringToFront()
+            }, 120L)
+        }
+        var installed = runCatching {
             HookRegistry.get().hook(onInit, object : HookCallback {
                 override fun after(param: HookParam) {
-                    val proxy = param.thisObject ?: return
-                    val talker = findVirtualFieldDeep(proxy) ?: return
-                    val activity = findActivityDeep(proxy)
-                        ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
-                        ?: return
-                    HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
-                    activity.window?.decorView?.postDelayed({
-                        showGroupPageOverlay(activity, talker)
-                        activeOverlays[activity]?.bringToFront()
-                    }, 120L)
+                    param.thisObject?.let(::show)
                 }
             })
         }.isSuccess
+        onEnterEnd?.let { method ->
+            installed = runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun after(param: HookParam) {
+                        param.thisObject?.let(::show)
+                    }
+                })
+            }.isSuccess || installed
+        }
+        onExitEnd?.let { method ->
+            installed = runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun after(param: HookParam) {
+                        val proxy = param.thisObject ?: return
+                        val activity = findActivityDeep(proxy)
+                            ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
+                            ?: return
+                        activeOverlays.remove(activity)?.let { view ->
+                            (view.parent as? ViewGroup)?.removeView(view)
+                        }
+                    }
+                })
+            }.isSuccess || installed
+        }
+        return installed
     }
 
     private fun findVirtualFieldDeep(target: Any, depth: Int = 2): String? {
