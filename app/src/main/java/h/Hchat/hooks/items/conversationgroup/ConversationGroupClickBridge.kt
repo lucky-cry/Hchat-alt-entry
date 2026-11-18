@@ -661,8 +661,12 @@ internal object ConversationGroupClickBridge {
                 if (event.action == MotionEvent.ACTION_UP) {
                     val y = event.y
                     if (y < dp(104)) {
-                        decor.removeView(page)
-                        activeOverlays.remove(activity)
+                        // 只有左上角返回箭头关闭分组页；标题/空白区域只消费点击，
+                        // 不能露出底下的原生“非好友”页。
+                        if (event.x < dp(64)) {
+                            removeGroupPage(activity)
+                            KavaReflector.invokeMethod(activity, "closeChatting", false)
+                        }
                     } else {
                         val index = ((y - dp(104)) / dp(68)).toInt()
                         val child = rows.getOrNull(index)?.first
