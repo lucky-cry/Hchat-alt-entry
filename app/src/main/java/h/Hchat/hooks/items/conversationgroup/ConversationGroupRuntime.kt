@@ -14,6 +14,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.ContextMenu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
 import android.widget.Adapter
 import android.widget.AdapterView
@@ -42,6 +43,7 @@ import java.lang.ref.WeakReference
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.security.MessageDigest
+import androidx.recyclerview.widget.RecyclerView
 import java.util.Collections
 import java.util.LinkedHashMap
 import java.util.WeakHashMap
@@ -110,6 +112,7 @@ object ConversationGroupRuntime {
     private val syncScheduled = AtomicBoolean(false)
     private val syncRequested = AtomicBoolean(false)
     private val hookedMethods = ConcurrentHashMap.newKeySet<Method>()
+    private val recyclerTouchInstalled = Collections.newSetFromMap(WeakHashMap<RecyclerView, Boolean>())
     private val menuBindings = Collections.synchronizedMap(
         WeakHashMap<MenuItem, ConversationMenuTarget>()
     )
@@ -243,6 +246,7 @@ object ConversationGroupRuntime {
             }
         )
         val clickInstalled = hook(click, groupClickHook())
+        val recyclerClickInstalled = installRecyclerClickHook(context)
         val nativeGroupQueryInstalled = hook(nativeGroupQuery, object : HookCallback {
             override fun before(param: HookParam) {
                 val parent = nativeGroupQueryParent.get()?.takeIf(::isVirtualTalker) ?: return
@@ -335,7 +339,7 @@ object ConversationGroupRuntime {
             }
         })
         return homeProjectionInstalled && queryInstalled && shareRecentAdapterInstalled &&
-            shareRecentForwardQueryInstalled && clickInstalled &&
+            shareRecentForwardQueryInstalled && (clickInstalled || recyclerClickInstalled) &&
             nativeGroupQueryInstalled && nativeGroupClickInstalled && nativeGroupRefreshInstalled &&
             nativeGroupMarkReadInstalled && nativeSetPinnedInstalled && nativeUnsetPinnedInstalled &&
             nativeHideConversationInstalled && nativeGroupStatusInstalled && nativePageInstalled &&
@@ -501,6 +505,66 @@ object ConversationGroupRuntime {
             }
         }
         syncAsync(context.hostContext())
+    }
+
+    private fun installRecyclerClickHook(context: FeatureContext): Boolean {
+        // 8.0.80 首页是 RecyclerView，旧的 AdapterView.onItemClick 不生效。
+        // 给 WxRecyclerAdapter 的 RecyclerView 注册触摸监听，虚拟分组行
+        // 不再走原生会话点击（否则会打开 wxid_hchat_group_... 并提示非好友）。
+        val adapterClass = KavaReflector.loadClass(
+            "com.tencent.mm.view.recyclerview.WxRecyclerAdapter",
+            context.hostClassLoader()
+        ) ?: return false
+        val method = KavaReflector.findDeclaredMethod(
+            adapterClass,
+            "onAttachedToRecyclerView",
+            RecyclerView::class.java
+        ) ?: return false
+        val attached = hook(method, object : HookCallback {
+            override fun after(param: HookParam) {
+                val recyclerView = param.args?.getOrNull(0) as? RecyclerView ?: return
+                attachRecyclerTouch(recyclerView)
+            }
+        })
+        // 首页 RecyclerView 通常在本 Hook 安装前已经 attach，再挂一层
+        // WxRecyclerAdapter 的 bind 回调，第一次绑定时补上触摸监听。
+        val bind = KavaReflector.declaredMethods(adapterClass).firstOrNull { candidate ->
+            candidate.name == "O" &&
+                candidate.parameterTypes.size == 2 &&
+                candidate.parameterTypes[1] == java.lang.Integer.TYPE &&
+                RecyclerView.ViewHolder::class.java.isAssignableFrom(candidate.parameterTypes[0])
+        }
+        val bound = bind?.let { bindMethod ->
+            hook(bindMethod, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val holder = param.args?.getOrNull(0) ?: return
+                    val itemView = KavaReflector.readField(holder, "itemView") as? View ?: return
+                    (itemView.parent as? RecyclerView)?.let(::attachRecyclerTouch)
+                }
+            })
+        } ?: false
+        return attached || bound
+    }
+
+    private fun attachRecyclerTouch(recyclerView: RecyclerView) {
+        if (!recyclerTouchInstalled.add(recyclerView)) return
+        recyclerView.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                if (e.action != MotionEvent.ACTION_UP) return false
+                val child = rv.findChildViewUnder(e.x, e.y) ?: return false
+                val position = rv.getChildAdapterPosition(child)
+                if (position < 0) return false
+                val adapter = rv.adapter ?: return false
+                val data = KavaReflector.invokeMethod(adapter, "getData") as? List<*> ?: return false
+                val item = data.getOrNull(position) ?: return false
+                val talker = virtualTalkerFromItem(item) ?: return false
+                val group = ConversationGroupStore.load(rv.context)
+                    .firstOrNull { virtualTalker(it.id) == talker } ?: return false
+                val activity = findActivity(rv.context) ?: return false
+                main.post { showGroup(activity, group.id) }
+                return true
+            }
+        })
     }
 
     private fun groupClickHook(): HookCallback {
