@@ -170,6 +170,49 @@ internal object ConversationGroupClickBridge {
         }.isSuccess
     }
 
+    /** 分组页显示时，按返回先收起分组页，让微信自己回首页。 */
+    fun installBackHandler(classLoader: ClassLoader): Boolean {
+        val launcherClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.LauncherUI",
+            classLoader
+        ) ?: return false
+        val onBackPressed = KavaReflector.declaredMethods(launcherClass).firstOrNull {
+            it.name == "onBackPressed" && it.parameterTypes.isEmpty()
+        } ?: return false
+        var installed = runCatching {
+            HookRegistry.get().hook(onBackPressed, object : HookCallback {
+                override fun before(param: HookParam) {
+                    removeGroupPage(param.thisObject as? Activity)
+                }
+            })
+        }.isSuccess
+        val dispatchKey = KavaReflector.declaredMethods(launcherClass).firstOrNull {
+            it.name == "dispatchKeyEvent" && it.parameterTypes.size == 1
+        }
+        dispatchKey?.let { method ->
+            installed = runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
+                        val event = param.args?.getOrNull(0) as? android.view.KeyEvent ?: return
+                        if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK &&
+                            event.action == android.view.KeyEvent.ACTION_UP
+                        ) {
+                            removeGroupPage(param.thisObject as? Activity)
+                        }
+                    }
+                })
+            }.isSuccess || installed
+        }
+        return installed
+    }
+
+    private fun removeGroupPage(activity: Activity?) {
+        activity ?: return
+        activeOverlays.remove(activity)?.let { view ->
+            (view.parent as? ViewGroup)?.removeView(view)
+        }
+    }
+
     /** 每次打开聊天都会走 ChattingUIProxy.onInit，用它覆盖第二次及以后打开。 */
     fun installChattingProxyHook(classLoader: ClassLoader): Boolean {
         val proxyClass = KavaReflector.loadClass(
