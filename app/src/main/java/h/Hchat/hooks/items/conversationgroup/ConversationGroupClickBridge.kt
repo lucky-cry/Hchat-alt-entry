@@ -77,6 +77,24 @@ internal object ConversationGroupClickBridge {
                 }.isSuccess
             ) ok = true
         }
+        // 记录真实点击过的虚拟分组行。微信 8.0.80 的首页点击不一定走
+        // 我们的 OnItemTouchListener，因此额外在 RecyclerView 触摸分发层兜底。
+        listOf("dispatchTouchEvent", "onTouchEvent").forEach { name ->
+            KavaReflector.declaredMethods(recyclerClass).firstOrNull {
+                it.name == name && it.parameterTypes.size == 1
+            }?.let { touchMethod ->
+                runCatching {
+                    HookRegistry.get().hook(touchMethod, object : HookCallback {
+                        override fun before(param: HookParam) {
+                            val rv = param.thisObject as? RecyclerView ?: return
+                            val event = param.args?.getOrNull(0) as? MotionEvent ?: return
+                            if (event.action != MotionEvent.ACTION_UP) return
+                            markPendingGroupTouch(rv, event)
+                        }
+                    })
+                }
+            }
+        }
         val setAdapter = KavaReflector.declaredMethods(recyclerClass).firstOrNull {
             it.name == "setAdapter" && it.parameterTypes.size == 1
         }
@@ -350,6 +368,7 @@ internal object ConversationGroupClickBridge {
                 ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
                 ?: return
             HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
+            pendingUserTalkers.add(talker)
             showGroupPageOverlay(activity, talker)
             activeOverlays[activity]?.bringToFront()
         }
@@ -1205,6 +1224,17 @@ internal object ConversationGroupClickBridge {
                 return true
             }
         })
+    }
+
+    private fun markPendingGroupTouch(rv: RecyclerView, event: MotionEvent) {
+        val child = rv.findChildViewUnder(event.x, event.y) ?: return
+        val position = rv.getChildAdapterPosition(child)
+        if (position < 0) return
+        val adapter = rv.adapter ?: return
+        val data = KavaReflector.invokeMethod(adapter, "getData") as? List<*> ?: return
+        val talker = virtualTalker(data.getOrNull(position)) ?: return
+        pendingUserTalkers.add(talker)
+        HLog.e("$TAG 触摸记录分组点击: talker=$talker")
     }
 
     private fun virtualTalker(item: Any?): String? {
