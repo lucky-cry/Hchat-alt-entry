@@ -163,11 +163,8 @@ internal object ConversationGroupClickBridge {
                     // ChattingUIFragment 的 onResume 早于聊天内容最终布局；立即挂浮层
                     // 会被随后渲染的原生“非好友”页盖住。延后一拍再显示，并在
                     // 后续 onResume 中把已有浮层提到最前。
-                    val decor = activity.window?.decorView
-                    decor?.postDelayed({
-                        showGroupPageOverlay(activity, talker)
-                        activeOverlays[activity]?.bringToFront()
-                    }, 120L)
+                    showGroupPageOverlay(activity, talker)
+                    activeOverlays[activity]?.bringToFront()
                 }
             })
         }.isSuccess
@@ -181,6 +178,9 @@ internal object ConversationGroupClickBridge {
         ) ?: return false
         val methods = KavaReflector.declaredMethods(proxyClass)
         val onInit = methods.firstOrNull { it.name == "onInit" } ?: return false
+        val onEnterBegin = methods.firstOrNull {
+            it.name == "onEnterBegin" && it.parameterTypes.isEmpty()
+        }
         val onEnterEnd = methods.firstOrNull {
             it.name == "onEnterEnd" && it.parameterTypes.isEmpty()
         }
@@ -193,10 +193,17 @@ internal object ConversationGroupClickBridge {
                 ?: (WeChatApis.currentActivity()?.currentActivity() as? Activity)
                 ?: return
             HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
-            activity.window?.decorView?.postDelayed({
-                showGroupPageOverlay(activity, talker)
-                activeOverlays[activity]?.bringToFront()
-            }, 120L)
+            showGroupPageOverlay(activity, talker)
+            activeOverlays[activity]?.bringToFront()
+        }
+        onEnterBegin?.let { method ->
+            runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun after(param: HookParam) {
+                        param.thisObject?.let(::show)
+                    }
+                })
+            }
         }
         var installed = runCatching {
             HookRegistry.get().hook(onInit, object : HookCallback {
@@ -504,7 +511,18 @@ internal object ConversationGroupClickBridge {
             ))
             activeOverlays[activity] = page
             page.bringToFront()
-            page.postDelayed({ page.bringToFront() }, 500L)
+            val observer = decor.viewTreeObserver
+            val preDraw = android.view.ViewTreeObserver.OnPreDrawListener {
+                activeOverlays[activity]?.bringToFront()
+                true
+            }
+            observer.addOnPreDrawListener(preDraw)
+            page.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View) = Unit
+                override fun onViewDetachedFromWindow(v: View) {
+                    runCatching { observer.removeOnPreDrawListener(preDraw) }
+                }
+            })
             HLog.e("$TAG 分组页已显示: ${rows.size} 行")
         }
     }
