@@ -228,10 +228,23 @@ internal object ConversationGroupClickBridge {
         val rows = group.conversationIds.map { id ->
             id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
         }
+        val details = runCatching {
+            val ids = group.conversationIds
+            if (ids.isEmpty()) return@runCatching emptyMap()
+            val placeholders = ids.joinToString(",") { "?" }
+            WeChatApis.database()?.query(
+                "SELECT username, content, conversationTime, unReadCount " +
+                    "FROM rconversation WHERE username IN ($placeholders)",
+                ids.toTypedArray()
+            ).orEmpty().mapNotNull { row ->
+                val username = row["username"] as? String ?: return@mapNotNull null
+                username to row
+            }.toMap()
+        }.getOrDefault(emptyMap())
         activity.runOnUiThread {
             val page = FrameLayout(activity).apply {
                 setBackgroundColor(Color.WHITE)
-                isClickable = false
+                isClickable = true
                 setPadding(0, dp(40), 0, 0)
             }
             val content = LinearLayout(activity).apply {
@@ -279,22 +292,16 @@ internal object ConversationGroupClickBridge {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(16), dp(10), dp(16), dp(10))
                     minimumHeight = dp(68)
-                    isClickable = true
-                    setOnClickListener {
-                        HLog.e("$TAG 点击分组行: id=$id name=$name")
-                        decor.removeView(page)
-                        activeOverlays.remove(activity)
-                        runCatching {
-                            activity.startActivity(
-                                Intent().setClassName(activity, CHATTING_UI).also {
-                                    it.putExtra(CHAT_USER, id)
-                                }
-                            )
-                        }.onFailure {
-                            HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
-                        }
-                    }
+                    isClickable = false
                 }
+                val detail = details[id].orEmpty()
+                val digest = (detail["content"] as? String)
+                    .orEmpty()
+                    .replace(Regex("<[^>]+>"), "")
+                    .trim()
+                    .ifBlank { if (id.endsWith("@chatroom")) "群聊" else "会话" }
+                val conversationTime = (detail["conversationTime"] as? Number)?.toLong() ?: 0L
+                val unread = (detail["unReadCount"] as? Number)?.toInt() ?: 0
                 val avatar = TextView(activity).apply {
                     text = name.take(1)
                     textSize = 20f
@@ -320,13 +327,43 @@ internal object ConversationGroupClickBridge {
                     maxLines = 1
                 })
                 text.addView(TextView(activity).apply {
-                    this.text = if (id.endsWith("@chatroom")) "群聊" else "会话"
+                    this.text = digest
                     textSize = 13f
                     setTextColor(Color.rgb(150, 150, 150))
+                    maxLines = 1
                     setPadding(0, dp(3), 0, 0)
                 })
                 row.addView(text, LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                ))
+                val right = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.END
+                    setPadding(dp(8), 0, 0, 0)
+                }
+                right.addView(TextView(activity).apply {
+                    this.text = formatConversationTime(conversationTime)
+                    textSize = 11f
+                    gravity = Gravity.END
+                    setTextColor(Color.rgb(170, 170, 170))
+                })
+                if (unread > 0) {
+                    right.addView(TextView(activity).apply {
+                        this.text = if (unread > 99) "99+" else unread.toString()
+                        textSize = 10f
+                        gravity = Gravity.CENTER
+                        setTextColor(Color.WHITE)
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            shape = android.graphics.drawable.GradientDrawable.OVAL
+                            setColor(Color.rgb(230, 70, 70))
+                        }
+                    }, LinearLayout.LayoutParams(dp(18), dp(18)).apply {
+                        topMargin = dp(4)
+                    })
+                }
+                row.addView(right, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
                 ))
                 list.addView(row, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -345,6 +382,33 @@ internal object ConversationGroupClickBridge {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
+            page.setOnTouchListener { _, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    val y = event.y
+                    if (y < dp(104)) {
+                        decor.removeView(page)
+                        activeOverlays.remove(activity)
+                    } else {
+                        val index = ((y - dp(104)) / dp(68)).toInt()
+                        val child = rows.getOrNull(index)?.first
+                        if (child != null) {
+                            HLog.e("$TAG 点击分组行: id=$child")
+                            decor.removeView(page)
+                            activeOverlays.remove(activity)
+                            runCatching {
+                                activity.startActivity(
+                                    Intent().setClassName(activity, CHATTING_UI).also {
+                                        it.putExtra(CHAT_USER, child)
+                                    }
+                                )
+                            }.onFailure {
+                                HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                            }
+                        }
+                    }
+                }
+                true
+            }
             decor.addView(page, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -429,6 +493,22 @@ internal object ConversationGroupClickBridge {
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
         HLog.e("$TAG 分组页已渲染: ${rows.size} 行")
+    }
+
+    private fun formatConversationTime(value: Long): String {
+        if (value <= 0L) return ""
+        val millis = if (value < 10_000_000_000L) value * 1000L else value
+        val now = java.util.Calendar.getInstance()
+        val target = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        val pattern = if (now.get(java.util.Calendar.YEAR) == target.get(java.util.Calendar.YEAR) &&
+            now.get(java.util.Calendar.DAY_OF_YEAR) == target.get(java.util.Calendar.DAY_OF_YEAR)
+        ) {
+            "HH:mm"
+        } else {
+            "MM-dd"
+        }
+        return java.text.SimpleDateFormat(pattern, java.util.Locale.getDefault())
+            .format(java.util.Date(millis))
     }
 
     private fun dp(value: Int): Int =
