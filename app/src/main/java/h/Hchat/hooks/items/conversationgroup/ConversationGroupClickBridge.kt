@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +14,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -24,8 +27,12 @@ import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.utils.HLog
 import h.Hchat.utils.KavaReflector
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
  * 8.0.80 首页是 RecyclerView；分组运行时在部分机型上会卡在首页投影定位，
@@ -44,6 +51,9 @@ internal object ConversationGroupClickBridge {
         WeakHashMap<Activity, OnBackPressedCallback>()
     )
     private val backGuardUntil = Collections.synchronizedMap(WeakHashMap<Activity, Long>())
+    private val avatarClient by lazy { OkHttpClient() }
+    private val avatarCache = ConcurrentHashMap<String, Bitmap>()
+    private val avatarExecutor = Executors.newFixedThreadPool(2)
     @Volatile private var installed = false
 
     /** 在 ModuleEntry.bootstrap 阶段调用：早于微信首页 RecyclerView 创建。 */
@@ -529,27 +539,42 @@ internal object ConversationGroupClickBridge {
                     isClickable = false
                 }
                 val detail = details[id].orEmpty()
-                val digest = (detail["content"] as? String)
-                    .orEmpty()
-                    .replace(Regex("<[^>]+>"), "")
-                    .trim()
-                    .ifBlank { if (id.endsWith("@chatroom")) "群聊" else "会话" }
+                val digest = formatGroupDigest(
+                    (detail["content"] as? String).orEmpty(),
+                    id,
+                    contacts
+                )
                 val conversationTime = (detail["conversationTime"] as? Number)?.toLong() ?: 0L
                 val unread = (detail["unReadCount"] as? Number)?.toInt() ?: 0
-                val avatar = TextView(activity).apply {
+                val avatarUrl = contacts?.getAvatarUrl(id).orEmpty()
+                val avatarColor =
+                    if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92)
+                    else Color.rgb(76, 132, 200)
+                val avatarImage = ImageView(activity).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    clipToOutline = true
+                    outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(avatarColor)
+                    }
+                }
+                val avatarFallback = TextView(activity).apply {
                     text = name.take(1)
                     textSize = 20f
                     gravity = Gravity.CENTER
                     setTextColor(Color.WHITE)
                     background = android.graphics.drawable.GradientDrawable().apply {
                         shape = android.graphics.drawable.GradientDrawable.OVAL
-                        setColor(
-                            if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92)
-                            else Color.rgb(76, 132, 200)
-                        )
+                        setColor(avatarColor)
                     }
                 }
-                row.addView(avatar, LinearLayout.LayoutParams(dp(48), dp(48)))
+                val avatarBox = FrameLayout(activity).apply {
+                    addView(avatarImage, FrameLayout.LayoutParams(dp(48), dp(48)))
+                    addView(avatarFallback, FrameLayout.LayoutParams(dp(48), dp(48)))
+                }
+                loadAvatar(activity, avatarUrl, avatarImage, avatarFallback)
+                row.addView(avatarBox, LinearLayout.LayoutParams(dp(48), dp(48)))
                 val text = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(12), 0, 0, 0)
@@ -741,6 +766,80 @@ internal object ConversationGroupClickBridge {
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
         HLog.e("$TAG 分组页已渲染: ${rows.size} 行")
+    }
+
+    private fun formatGroupDigest(
+        raw: String,
+        chatId: String,
+        contacts: h.Hchat.hooks.api.contact.WeChatContactApi?
+    ): String {
+        if (raw.isBlank()) return if (chatId.endsWith("@chatroom")) "群聊" else "会话"
+        var text = raw.trim()
+        var senderId: String? = null
+        Regex("^([A-Za-z0-9_@.\\-]{2,64}):\\s*", RegexOption.DOT_MATCHES_ALL)
+            .find(text)
+            ?.let { match ->
+                senderId = match.groupValues.getOrNull(1)
+                text = text.substring(match.range.last + 1)
+            }
+        if (text.contains("<msg") || text.contains("<content")) {
+            val content = Regex("<content>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
+                .find(text)?.groupValues?.getOrNull(1)
+            val title = Regex("<title>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
+                .find(text)?.groupValues?.getOrNull(1)
+            text = content ?: title ?: ""
+        }
+        text = text
+            .replace(Regex("<[^>]+>"), " ")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (text.isBlank()) text = "[消息]"
+        val sender = senderId
+        if (sender.isNullOrBlank()) return text
+        val senderName = runCatching {
+            if (chatId.endsWith("@chatroom")) {
+                contacts?.getGroupMemberDisplayName(chatId, sender)
+                    ?.takeIf { it.isNotBlank() && it != sender }
+            } else null
+        }.getOrNull()
+            ?: runCatching { contacts?.getDisplayName(sender) }.getOrNull()
+                ?.takeIf { it.isNotBlank() }
+            ?: sender
+        return "$senderName: $text"
+    }
+
+    private fun loadAvatar(
+        activity: Activity,
+        url: String,
+        image: ImageView,
+        fallback: TextView
+    ) {
+        if (url.isBlank()) return
+        avatarCache[url]?.let {
+            image.setImageBitmap(it)
+            fallback.visibility = View.GONE
+            return
+        }
+        image.tag = url
+        avatarExecutor.execute {
+            val bitmap = runCatching {
+                avatarClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.byteStream()?.use(BitmapFactory::decodeStream)
+                }
+            }.getOrNull() ?: return@execute
+            avatarCache[url] = bitmap
+            activity.runOnUiThread {
+                if (image.tag == url) {
+                    image.setImageBitmap(bitmap)
+                    fallback.visibility = View.GONE
+                }
+            }
+        }
     }
 
     private fun formatConversationTime(value: Long): String {
