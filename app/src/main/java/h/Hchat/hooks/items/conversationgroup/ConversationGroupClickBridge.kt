@@ -4,11 +4,16 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
@@ -233,25 +238,69 @@ internal object ConversationGroupClickBridge {
         }
         activity.runOnUiThread {
             runCatching {
-                android.app.AlertDialog.Builder(activity)
-                    .setTitle(group.name.ifBlank { "聊天分组" })
-                    .setItems(names.toTypedArray()) { _, index ->
-                        val child = group.conversationIds.getOrNull(index) ?: return@setItems
-                        runCatching {
-                            activity.startActivity(
-                                Intent().setClassName(activity, CHATTING_UI).also {
-                                    it.putExtra(CHAT_USER, child)
-                                }
-                            )
-                        }.onFailure {
-                            HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                val decor = activity.window?.decorView as? ViewGroup ?: return@runOnUiThread
+                val density = activity.resources.displayMetrics.density
+                fun dp(value: Int) = (value * density).toInt()
+                val overlay = FrameLayout(activity).apply {
+                    setBackgroundColor(Color.argb(150, 0, 0, 0))
+                    isClickable = true
+                }
+                val panel = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setBackgroundColor(Color.WHITE)
+                    setPadding(dp(18), dp(14), dp(18), dp(10))
+                }
+                panel.addView(TextView(activity).apply {
+                    text = group.name.ifBlank { "聊天分组" }
+                    textSize = 18f
+                    setTextColor(Color.BLACK)
+                    setPadding(0, 0, 0, dp(8))
+                })
+                group.conversationIds.forEachIndexed { index, child ->
+                    panel.addView(TextView(activity).apply {
+                        text = names.getOrNull(index) ?: child
+                        textSize = 16f
+                        setTextColor(Color.BLACK)
+                        setPadding(0, dp(12), 0, dp(12))
+                        isClickable = true
+                        setOnClickListener {
+                            decor.removeView(overlay)
+                            runCatching {
+                                activity.startActivity(
+                                    Intent().setClassName(activity, CHATTING_UI).also {
+                                        it.putExtra(CHAT_USER, child)
+                                    }
+                                )
+                            }.onFailure {
+                                HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                            }
                         }
-                    }
-                    .setNegativeButton("关闭", null)
-                    .show()
-                HLog.e("$TAG 分组列表弹窗已显示")
+                    })
+                }
+                panel.addView(TextView(activity).apply {
+                    text = "关闭"
+                    textSize = 15f
+                    gravity = Gravity.END
+                    setTextColor(Color.DKGRAY)
+                    setPadding(0, dp(10), 0, 0)
+                    isClickable = true
+                    setOnClickListener { decor.removeView(overlay) }
+                })
+                overlay.addView(panel, FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    gravity = Gravity.CENTER
+                    leftMargin = dp(20)
+                    rightMargin = dp(20)
+                })
+                decor.addView(overlay, ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ))
+                HLog.e("$TAG 分组列表浮层已显示")
             }.onFailure {
-                HLog.e("$TAG 分组列表弹窗失败: ${it.message}", it)
+                HLog.e("$TAG 分组列表浮层失败: ${it.message}", it)
             }
         }
     }
