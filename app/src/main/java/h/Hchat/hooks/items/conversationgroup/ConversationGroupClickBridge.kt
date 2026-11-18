@@ -160,20 +160,14 @@ internal object ConversationGroupClickBridge {
                     HLog.e("$TAG Fragment 观察器命中: ${fragment.javaClass.name} talker=$talker")
                     val activity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
                         ?: return
-                    runCatching {
-                        val fm = KavaReflector.invokeMethod(fragment, "getParentFragmentManager")
-                            ?: KavaReflector.invokeMethod(fragment, "getFragmentManager")
-                        if (fm != null) {
-                            val tx = KavaReflector.invokeMethod(fm, "beginTransaction")
-                            if (tx != null) {
-                                KavaReflector.invokeMethod(tx, "remove", fragment)
-                                KavaReflector.invokeMethod(tx, "commit")
-                            }
-                        }
+                    // ChattingUIFragment 的 onResume 早于聊天内容最终布局；立即挂浮层
+                    // 会被随后渲染的原生“非好友”页盖住。延后一拍再显示，并在
+                    // 后续 onResume 中把已有浮层提到最前。
+                    val decor = activity.window?.decorView
+                    decor?.postDelayed({
                         showGroupPageOverlay(activity, talker)
-                    }.onFailure {
-                        HLog.e("$TAG Fragment 观察器跳转失败: ${it.message}", it)
-                    }
+                        activeOverlays[activity]?.bringToFront()
+                    }, 120L)
                 }
             })
         }.isSuccess
@@ -223,7 +217,10 @@ internal object ConversationGroupClickBridge {
         val group = ConversationGroupStore.load(activity)
             .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
         val decor = activity.window?.decorView as? ViewGroup ?: return
-        if (activeOverlays.containsKey(activity)) return
+        activeOverlays[activity]?.let { existing ->
+            existing.bringToFront()
+            return
+        }
         val contacts = WeChatApis.contact()?.contacts()
         val rows = group.conversationIds.map { id ->
             id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
@@ -414,6 +411,8 @@ internal object ConversationGroupClickBridge {
                 ViewGroup.LayoutParams.MATCH_PARENT
             ))
             activeOverlays[activity] = page
+            page.bringToFront()
+            page.postDelayed({ page.bringToFront() }, 500L)
             HLog.e("$TAG 分组页已显示: ${rows.size} 行")
         }
     }
