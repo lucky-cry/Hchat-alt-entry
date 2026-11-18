@@ -184,7 +184,7 @@ internal object ConversationGroupClickBridge {
                 override fun before(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     if (removeGroupPage(activity)) {
-                        KavaReflector.invokeMethod(activity, "closeChatting", true)
+                        KavaReflector.invokeMethod(activity, "closeChatting", false)
                     }
                 }
             })
@@ -202,7 +202,7 @@ internal object ConversationGroupClickBridge {
                         ) {
                             val activity = param.thisObject as? Activity ?: return
                             if (removeGroupPage(activity)) {
-                                KavaReflector.invokeMethod(activity, "closeChatting", true)
+                                KavaReflector.invokeMethod(activity, "closeChatting", false)
                                 param.result = true
                             }
                         }
