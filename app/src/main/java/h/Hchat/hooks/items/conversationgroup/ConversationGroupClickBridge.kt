@@ -43,6 +43,7 @@ internal object ConversationGroupClickBridge {
     private val backCallbacks = Collections.synchronizedMap(
         WeakHashMap<Activity, OnBackPressedCallback>()
     )
+    private val backGuardUntil = Collections.synchronizedMap(WeakHashMap<Activity, Long>())
     @Volatile private var installed = false
 
     /** 在 ModuleEntry.bootstrap 阶段调用：早于微信首页 RecyclerView 创建。 */
@@ -161,6 +162,10 @@ internal object ConversationGroupClickBridge {
             HookRegistry.get().hook(onResume, object : HookCallback {
                 override fun after(param: HookParam) {
                     val fragment = param.thisObject ?: return
+                    val fragmentActivity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
+                    if (fragmentActivity != null && activeOverlays.containsKey(fragmentActivity)) {
+                        ensureBackCallback(fragmentActivity)
+                    }
                     val talker = findVirtualField(fragment) ?: return
                     HLog.e("$TAG Fragment 观察器命中: ${fragment.javaClass.name} talker=$talker")
                     val activity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
@@ -170,6 +175,61 @@ internal object ConversationGroupClickBridge {
                     // 后续 onResume 中把已有浮层提到最前。
                     showGroupPageOverlay(activity, talker)
                     activeOverlays[activity]?.bringToFront()
+                }
+            })
+        }.isSuccess
+    }
+
+    /** 在 Activity 分发层吃掉系统返回，避免继续退出桌面。 */
+    fun installDispatchBackHook(classLoader: ClassLoader): Boolean {
+        val launcherClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.LauncherUI",
+            classLoader
+        ) ?: return false
+        val dispatchKey = KavaReflector.declaredMethods(launcherClass).firstOrNull {
+            it.name == "dispatchKeyEvent" && it.parameterTypes.size == 1
+        } ?: return false
+        return runCatching {
+            HookRegistry.get().hook(dispatchKey, object : HookCallback {
+                override fun before(param: HookParam) {
+                    val event = param.args?.getOrNull(0) as? android.view.KeyEvent ?: return
+                    if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                        val activity = param.thisObject as? Activity ?: return
+                        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                            if (removeGroupPage(activity)) {
+                                HLog.e("$TAG dispatch 返回键接管")
+                                showHomeTab(activity)
+                                backGuardUntil[activity] = System.currentTimeMillis() + 800L
+                                param.result = true
+                            }
+                        } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+                            val guard = backGuardUntil[activity] ?: 0L
+                            if (System.currentTimeMillis() < guard) {
+                                param.result = true
+                            }
+                        }
+                    }
+                }
+            })
+        }.isSuccess
+    }
+
+    /** 从子聊天页返回 LauncherUI 时，恢复分组页的返回回调。 */
+    fun installLauncherResumeHook(classLoader: ClassLoader): Boolean {
+        val launcherClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.LauncherUI",
+            classLoader
+        ) ?: return false
+        val onResume = KavaReflector.declaredMethods(launcherClass).firstOrNull {
+            it.name == "onResume" && it.parameterTypes.isEmpty()
+        } ?: return false
+        return runCatching {
+            HookRegistry.get().hook(onResume, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val activity = param.thisObject as? Activity ?: return
+                    if (activeOverlays.containsKey(activity)) {
+                        ensureBackCallback(activity)
+                    }
                 }
             })
         }.isSuccess
@@ -216,6 +276,29 @@ internal object ConversationGroupClickBridge {
             }.isSuccess || installed
         }
         return installed
+    }
+
+    private fun ensureBackCallback(activity: Activity) {
+        backCallbacks[activity]?.let { if (it.isEnabled) return }
+        backCallbacks.remove(activity)?.remove()
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                HLog.e("$TAG 系统返回回调触发")
+                if (removeGroupPage(activity)) {
+                    showHomeTab(activity)
+                }
+            }
+        }
+        (activity as? ComponentActivity)?.onBackPressedDispatcher?.addCallback(
+            activity as ComponentActivity,
+            callback
+        )
+        backCallbacks[activity] = callback
+        HLog.e("$TAG 注册系统返回回调")
+    }
+
+    private fun showHomeTab(activity: Activity) {
+        KavaReflector.invokeMethod(activity, "closeChatting", false)
     }
 
     private fun removeGroupPage(activity: Activity?): Boolean {
@@ -372,6 +455,7 @@ internal object ConversationGroupClickBridge {
         val decor = activity.window?.decorView as? ViewGroup ?: return
         activeOverlays[activity]?.let { existing ->
             existing.bringToFront()
+            ensureBackCallback(activity)
             return
         }
         val contacts = WeChatApis.contact()?.contacts()
@@ -565,19 +649,7 @@ internal object ConversationGroupClickBridge {
             ))
             activeOverlays[activity] = page
             page.bringToFront()
-            backCallbacks.remove(activity)?.remove()
-            val backCallback = object : OnBackPressedCallback(true) {
-                override fun handleOnBackPressed() {
-                    if (removeGroupPage(activity)) {
-                        KavaReflector.invokeMethod(activity, "closeChatting", false)
-                    }
-                }
-            }
-            (activity as? ComponentActivity)?.onBackPressedDispatcher?.addCallback(
-                activity as ComponentActivity,
-                backCallback
-            )
-            backCallbacks[activity] = backCallback
+            ensureBackCallback(activity)
             val observer = decor.viewTreeObserver
             val preDraw = android.view.ViewTreeObserver.OnPreDrawListener {
                 activeOverlays[activity]?.bringToFront()
