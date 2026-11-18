@@ -12,6 +12,8 @@ class ConversationGroupFeature : BaseFeature() {
 
     override fun onFeatureInit(context: FeatureContext) {
         registerSettingsProvider(ConversationGroupSettingsProvider())
+        // 必须在首页 RecyclerView.setAdapter 之前装好，BRIDGE 阶段已经太晚。
+        ConversationGroupClickBridge.install(context)
     }
 
     override fun onFeatureInstall(context: FeatureContext) {

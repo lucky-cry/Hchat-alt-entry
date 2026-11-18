@@ -34,6 +34,40 @@ internal object ConversationGroupClickBridge {
     private val installedViews = Collections.newSetFromMap(WeakHashMap<RecyclerView, Boolean>())
     @Volatile private var installed = false
 
+    /** 在 ModuleEntry.bootstrap 阶段调用：早于微信首页 RecyclerView 创建。 */
+    fun installEarly(classLoader: ClassLoader): Boolean {
+        if (installed) return true
+        val recyclerClass = KavaReflector.loadClass(
+            "androidx.recyclerview.widget.RecyclerView",
+            classLoader
+        ) ?: return false
+        var ok = false
+        KavaReflector.declaredConstructors(recyclerClass).forEach { ctor ->
+            if (runCatching {
+                    HookRegistry.get().hook(ctor, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            (param.thisObject as? RecyclerView)?.let(::attach)
+                        }
+                    })
+                }.isSuccess
+            ) ok = true
+        }
+        val setAdapter = KavaReflector.declaredMethods(recyclerClass).firstOrNull {
+            it.name == "setAdapter" && it.parameterTypes.size == 1
+        }
+        if (setAdapter != null && runCatching {
+                HookRegistry.get().hook(setAdapter, object : HookCallback {
+                    override fun after(param: HookParam) {
+                        (param.thisObject as? RecyclerView)?.let(::attach)
+                    }
+                })
+            }.isSuccess
+        ) ok = true
+        if (ok) installed = true
+        HLog.e("$TAG 点击桥早期安装: ctor/setAdapter=$ok")
+        return ok
+    }
+
     fun install(context: FeatureContext): Boolean {
         if (installed) return true
         synchronized(this) {
