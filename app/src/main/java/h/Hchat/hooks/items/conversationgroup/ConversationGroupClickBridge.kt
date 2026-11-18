@@ -97,6 +97,31 @@ internal object ConversationGroupClickBridge {
                 "androidx.recyclerview.widget.RecyclerView",
                 context.hostClassLoader()
             )
+            val constructorInstalled = recyclerClass?.let { clazz ->
+                KavaReflector.declaredConstructors(clazz).count { ctor ->
+                    runCatching {
+                        HookRegistry.get().hook(ctor, object : HookCallback {
+                            override fun after(param: HookParam) {
+                                (param.thisObject as? RecyclerView)?.let(::attach)
+                            }
+                        })
+                    }.isSuccess
+                } > 0
+            } ?: false
+            val setAdapter = recyclerClass?.let { clazz ->
+                KavaReflector.declaredMethods(clazz).firstOrNull {
+                    it.name == "setAdapter" && it.parameterTypes.size == 1
+                }
+            }
+            val setAdapterInstalled = setAdapter?.let { method ->
+                runCatching {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            (param.thisObject as? RecyclerView)?.let(::attach)
+                        }
+                    })
+                }.isSuccess
+            } ?: false
             val onLayout = recyclerClass?.let { clazz ->
                 KavaReflector.declaredMethods(clazz).firstOrNull {
                     it.name == "onLayout" && it.parameterTypes.size == 4
@@ -111,19 +136,24 @@ internal object ConversationGroupClickBridge {
                     })
                 }.isSuccess
             } ?: false
-            installed = attachInstalled || bindInstalled || layoutInstalled || viewAttachedInstalled
+            installed = attachInstalled || bindInstalled || layoutInstalled ||
+                viewAttachedInstalled || setAdapterInstalled || constructorInstalled
             HLog.e(
                 "$TAG 点击桥: attach=$attachInstalled bind=$bindInstalled layout=$layoutInstalled " +
-                    "viewAttached=$viewAttachedInstalled"
+                    "viewAttached=$viewAttachedInstalled setAdapter=$setAdapterInstalled " +
+                    "ctor=$constructorInstalled"
             )
             val launcherClass = KavaReflector.loadClass(
                 "com.tencent.mm.ui.LauncherUI",
                 context.hostClassLoader()
             )
-            val onResume = launcherClass?.let { clazz ->
-                KavaReflector.declaredMethods(clazz).firstOrNull {
+            var resumeOwner: Class<*>? = launcherClass
+            var onResume: java.lang.reflect.Method? = null
+            while (resumeOwner != null && onResume == null) {
+                onResume = KavaReflector.declaredMethods(resumeOwner).firstOrNull {
                     it.name == "onResume" && it.parameterTypes.isEmpty()
                 }
+                resumeOwner = resumeOwner.superclass
             }
             onResume?.let { method ->
                 runCatching {
