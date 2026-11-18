@@ -567,11 +567,14 @@ class AntiRecallFeature : BaseFeature() {
         }
         localMessages.ensureReady()
         val targetCreateTime = resolveRecalledCreateTime(svrId, recalledInfo)
-        val notice = if (selfRecall) {
-            AntiRecallSettings.SELF_NOTICE_TEXT
-        } else {
-            noticeText(context, talker, recalledInfo, targetCreateTime, recallTime)
-        }
+        val notice = noticeText(
+            context,
+            talker,
+            recalledInfo,
+            targetCreateTime,
+            recallTime,
+            selfRecall
+        )
         val insertAt = if (targetCreateTime > 0L) {
             targetCreateTime + 1L
         } else {
@@ -583,6 +586,7 @@ class AntiRecallFeature : BaseFeature() {
             )
             recallTime.takeIf { it > 0L } ?: System.currentTimeMillis()
         }
+        h.Hchat.utils.HLog.e("$TAG 撤回提示文案: $notice")
         val result = localMessages.insertSystemMessageAt(talker, notice, insertAt)
         if (result <= 0L) {
             h.Hchat.utils.HLog.e("$TAG 插入提示失败: talker=$talker newmsgid=$svrId")
@@ -652,7 +656,8 @@ class AntiRecallFeature : BaseFeature() {
         talker: String,
         recalledInfo: WeChatRecalledMessage?,
         sendTime: Long,
-        recallTime: Long
+        recallTime: Long,
+        selfRecall: Boolean = false
     ): String {
         val savedTemplate = HchatStorage.preferences(context.hostContext(), AntiRecallSettings.PREFS_NAME)
             .getString(AntiRecallSettings.KEY_NOTICE_TEXT, AntiRecallSettings.DEFAULT_NOTICE_TEXT)
@@ -660,7 +665,7 @@ class AntiRecallFeature : BaseFeature() {
             ?: AntiRecallSettings.DEFAULT_NOTICE_TEXT
         val template = normalizeNoticeTemplate(savedTemplate)
         val timeFormat = noticeTimeFormat(context)
-        val name = recallName(talker, recalledInfo)
+        val name = if (selfRecall) "你" else recallName(talker, recalledInfo)
         val content = recallText(recalledInfo)
         val result = template
             .replace(AntiRecallSettings.VAR_RECALLER_NAME, name)
