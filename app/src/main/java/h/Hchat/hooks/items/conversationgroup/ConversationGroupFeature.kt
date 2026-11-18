@@ -3,6 +3,7 @@ package h.Hchat.hooks.items.conversationgroup
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
+import h.Hchat.utils.HLog
 
 class ConversationGroupFeature : BaseFeature() {
     override fun featureId(): String = ID
@@ -14,6 +15,7 @@ class ConversationGroupFeature : BaseFeature() {
     }
 
     override fun onFeatureInstall(context: FeatureContext) {
+        HLog.e("[Hchat:ConversationGroup] onFeatureInstall")
         val generation = ConversationGroupRuntime.beginInstall()
         DexInstallScheduler.schedule(ID, name(), stage = DexInstallScheduler.Stage.BRIDGE) {
             if (!ConversationGroupRuntime.isInstallGenerationActive(generation)) {

@@ -157,24 +157,30 @@ object ConversationGroupRuntime {
         if (!isInstallGenerationActive(generation)) true else installInternal(context)
     }
 
+    private fun installAbort(step: String): Boolean {
+        HLog.e("$TAG install 中止: $step")
+        return false
+    }
+
     private fun installInternal(context: FeatureContext): Boolean {
-        val query = locateQueryMethod(context) ?: return false
-        val shareRecentAdapterReset = locateShareRecentAdapterResetMethod(context) ?: return false
-        val shareRecentForwardQuery = locateShareRecentForwardQueryMethod(context) ?: return false
-        val parentUpdate = locateParentUpdateMethod(context) ?: return false
-        val nativeSetPinned = locateNativeSetPinnedMethod(context) ?: return false
-        val nativeUnsetPinned = locateNativeUnsetPinnedMethod(context) ?: return false
-        val nativeHideConversation = locateNativeHideConversationMethod(context) ?: return false
-        val click = locateClickMethod(context) ?: return false
-        val nativeGroupQuery = locateNativeGroupQueryMethod(context) ?: return false
-        val nativeGroupClick = locateNativeGroupClickMethod(context) ?: return false
-        val nativeGroupRefresh = locateNativeGroupRefreshMethod(context) ?: return false
-        val nativeGroupMarkRead = locateNativeGroupMarkReadMethod(context) ?: return false
+        HLog.e("$TAG installInternal 开始")
+        val query = locateQueryMethod(context) ?: return installAbort("main_query")
+        val shareRecentAdapterReset = locateShareRecentAdapterResetMethod(context) ?: return installAbort("share_reset")
+        val shareRecentForwardQuery = locateShareRecentForwardQueryMethod(context) ?: return installAbort("share_forward")
+        val parentUpdate = locateParentUpdateMethod(context) ?: return installAbort("parent_update")
+        val nativeSetPinned = locateNativeSetPinnedMethod(context) ?: return installAbort("set_pinned")
+        val nativeUnsetPinned = locateNativeUnsetPinnedMethod(context) ?: return installAbort("unset_pinned")
+        val nativeHideConversation = locateNativeHideConversationMethod(context) ?: return installAbort("hide")
+        val click = locateClickMethod(context) ?: return installAbort("click")
+        val nativeGroupQuery = locateNativeGroupQueryMethod(context) ?: return installAbort("group_query")
+        val nativeGroupClick = locateNativeGroupClickMethod(context) ?: return installAbort("group_click")
+        val nativeGroupRefresh = locateNativeGroupRefreshMethod(context) ?: return installAbort("group_refresh")
+        val nativeGroupMarkRead = locateNativeGroupMarkReadMethod(context) ?: return installAbort("group_mark_read")
         val nativeGroupStatusNotify = locateNativeGroupStatusNotifyMethod(context)
         val nativeGroupMenuMethods = locateNativeGroupMenuMethods(context)
         val conversationMenu = ConversationMenuLocator.menuCreateMethod(context) { message, throwable ->
             HLog.e("$TAG $message", throwable)
-        } ?: return false
+        } ?: return installAbort("conversation_menu")
         parentUpdateMethod = parentUpdate
         nativeGroupRefreshMethod = nativeGroupRefresh
         val homeProjectionInstalled = ConversationGroupHomeProjection.install(context) {
@@ -2186,6 +2192,20 @@ object ConversationGroupRuntime {
     }
 
     private fun locateQueryMethod(context: FeatureContext): Method? {
+        // 8.0.80 的 m4.C 是主会话查询；先用已知方法，避免旧缓存
+        // 校验失败后卡在 DexKit 查询。
+        val known = runCatching {
+            KavaReflector.findMethod(
+                KavaReflector.loadClass("com.tencent.mm.storage.m4", context.hostClassLoader()),
+                "C",
+                java.lang.Integer.TYPE,
+                List::class.java,
+                String::class.java,
+                java.lang.Boolean.TYPE,
+                String::class.java
+            )
+        }.getOrNull()?.takeIf(::isQueryMethod)
+        if (known != null) return known
         return loadCached(context, CACHE_QUERY, ::isQueryMethod) ?: locateAndCache(
             context,
             CACHE_QUERY,
