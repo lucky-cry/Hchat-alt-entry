@@ -134,6 +134,45 @@ internal object ConversationGroupClickBridge {
         }.isSuccess
     }
 
+    /**
+     * 通用 Fragment 观察器：不依赖具体聊天 Fragment 混淆名。
+     * 任何 Fragment 的字段里出现虚拟 talker 时，直接跳原生分组页并移除该 Fragment。
+     */
+    fun installFragmentWatcher(classLoader: ClassLoader): Boolean {
+        val fragmentClass = KavaReflector.loadClass(
+            "androidx.fragment.app.Fragment",
+            classLoader
+        ) ?: return false
+        val onResume = KavaReflector.declaredMethods(fragmentClass).firstOrNull {
+            it.name == "onResume" && it.parameterTypes.isEmpty()
+        } ?: return false
+        return runCatching {
+            HookRegistry.get().hook(onResume, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val fragment = param.thisObject ?: return
+                    val talker = findVirtualField(fragment) ?: return
+                    HLog.e("$TAG Fragment 观察器命中: ${fragment.javaClass.name} talker=$talker")
+                    val activity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
+                        ?: return
+                    runCatching {
+                        val fm = KavaReflector.invokeMethod(fragment, "getParentFragmentManager")
+                            ?: KavaReflector.invokeMethod(fragment, "getFragmentManager")
+                        if (fm != null) {
+                            val tx = KavaReflector.invokeMethod(fm, "beginTransaction")
+                            if (tx != null) {
+                                KavaReflector.invokeMethod(tx, "remove", fragment)
+                                KavaReflector.invokeMethod(tx, "commit")
+                            }
+                        }
+                        showGroupDialog(activity, talker)
+                    }.onFailure {
+                        HLog.e("$TAG Fragment 观察器跳转失败: ${it.message}", it)
+                    }
+                }
+            })
+        }.isSuccess
+    }
+
     /** 新版微信聊天页是 LauncherUI 内的 ChattingUIFragment。 */
     fun installChattingFragmentRedirect(classLoader: ClassLoader): Boolean {
         val fragmentClass = KavaReflector.loadClass(
@@ -172,6 +211,35 @@ internal object ConversationGroupClickBridge {
         }
         HLog.e("$TAG 聊天 Fragment 重定向: $ok")
         return ok
+    }
+
+    private fun showGroupDialog(activity: Activity, talker: String) {
+        val group = ConversationGroupStore.load(activity)
+            .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
+        val contacts = WeChatApis.contact()?.contacts()
+        val names = group.conversationIds.map { conversation ->
+            contacts?.getDisplayName(conversation)?.takeIf { it.isNotBlank() } ?: conversation
+        }
+        if (names.isEmpty()) {
+            android.widget.Toast.makeText(activity, "分组内没有会话", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.app.AlertDialog.Builder(activity)
+            .setTitle(group.name.ifBlank { "聊天分组" })
+            .setItems(names.toTypedArray()) { _, index ->
+                val child = group.conversationIds.getOrNull(index) ?: return@setItems
+                runCatching {
+                    activity.startActivity(
+                        Intent().setClassName(activity, CHATTING_UI).also {
+                            it.putExtra(CHAT_USER, child)
+                        }
+                    )
+                }.onFailure {
+                    HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                }
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     private fun findVirtualField(target: Any): String? {

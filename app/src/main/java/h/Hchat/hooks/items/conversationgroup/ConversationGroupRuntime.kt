@@ -160,6 +160,11 @@ object ConversationGroupRuntime {
         if (!isInstallGenerationActive(generation)) true else installInternal(context)
     }
 
+    /** 只安装原生分组页 Hook，不依赖查询/投影初始化。 */
+    @JvmStatic
+    fun installNativePageOnly(context: FeatureContext): Boolean =
+        synchronized(lifecycleLock) { installNativeGroupPageHooks(context) }
+
     private fun installAbort(step: String): Boolean {
         HLog.e("$TAG install 中止: $step")
         return false

@@ -19,6 +19,12 @@ class ConversationGroupFeature : BaseFeature() {
     override fun onFeatureInstall(context: FeatureContext) {
         HLog.e("[Hchat:ConversationGroup] onFeatureInstall")
         ConversationGroupClickBridge.install(context)
+        runCatching {
+            HLog.e(
+                "[Hchat:ConversationGroup] 原生分组页 Hook=" +
+                    ConversationGroupRuntime.installNativePageOnly(context)
+            )
+        }
         val generation = ConversationGroupRuntime.beginInstall()
         DexInstallScheduler.schedule(ID, name(), stage = DexInstallScheduler.Stage.BRIDGE) {
             if (!ConversationGroupRuntime.isInstallGenerationActive(generation)) {
