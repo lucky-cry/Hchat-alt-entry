@@ -93,8 +93,10 @@ object ConversationGroupStore {
         val unique = LinkedHashMap<String, ConversationGroup>()
         groups.forEach { source ->
             val id = source.id.trim()
-            val name = source.name.trim()
-            if (id.isBlank() || name.isBlank()) return@forEach
+            // 旧数据/自动分组可能留下空名称；不能整组丢弃，否则分组行
+            // 和里面的会话都会消失。
+            val name = source.name.trim().ifBlank { "未命名分组" }
+            if (id.isBlank()) return@forEach
 
             val conversations = source.conversationIds
                 .asSequence()

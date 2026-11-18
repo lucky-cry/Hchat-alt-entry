@@ -76,6 +76,7 @@ class AntiRecallFeature : BaseFeature() {
                             val replaceMsg = args.getOrNull(3) as? String ?: ""
                             val payload = args.getOrNull(2)
                             val recallTime = resolveRecallEventTime(payload)
+                            h.Hchat.utils.HLog.e("$TAG 收到撤回事件: talker=$talker svrId=$svrId")
                             val payloadInfo = parseRevokePayload(talker, svrId, payload, replaceMsg)
                             val recalledInfo = resolveRecalledInfo(talker, svrId, payloadInfo)
                             publishRecallEvent(context, talker, svrId, recalledInfo)
@@ -98,6 +99,11 @@ class AntiRecallFeature : BaseFeature() {
                 logError("防撤回入口未找到", null)
             }
         }
+        h.Hchat.utils.HLog.e(
+            "$TAG Hook状态: revokeEntries=${revokeEntries.size} revokeInstalled=$revokeEntryInstalled " +
+                "messageStorage=$messageStorageHookInstalled msgProcessing=$msgProcessingHookInstalled " +
+                "legacyCleanup=$legacyCleanupHookInstalled"
+        )
         return revokeEntryInstalled &&
             messageStorageHookInstalled &&
             (msgProcessingHookInstalled || legacyCleanupHookInstalled)
@@ -566,16 +572,22 @@ class AntiRecallFeature : BaseFeature() {
         } else {
             noticeText(context, talker, recalledInfo, targetCreateTime, recallTime)
         }
-        if (targetCreateTime <= 0L) {
+        val insertAt = if (targetCreateTime > 0L) {
+            targetCreateTime + 1L
+        } else {
+            // 原消息已被撤回/缓存缺失时，旧逻辑直接放弃，用户就完全看不到提示。
+            // 退回当前时间追加提示，至少保留“谁撤回了什么”。
             h.Hchat.utils.HLog.e(
-                "$TAG 插入提示失败: 未定位原消息时间 talker=$talker id=$svrId " +
+                "$TAG 未定位原消息时间，提示改追加到当前时间: talker=$talker id=$svrId " +
                     "origin=${recalledInfo?.originSvrId ?: 0L} new=${recalledInfo?.newMsgId ?: 0L}"
             )
-            return
+            recallTime.takeIf { it > 0L } ?: System.currentTimeMillis()
         }
-        val result = localMessages.insertSystemMessageAt(talker, notice, targetCreateTime + 1L)
+        val result = localMessages.insertSystemMessageAt(talker, notice, insertAt)
         if (result <= 0L) {
             h.Hchat.utils.HLog.e("$TAG 插入提示失败: talker=$talker newmsgid=$svrId")
+        } else {
+            h.Hchat.utils.HLog.e("$TAG 插入撤回提示成功: talker=$talker newmsgid=$svrId at=$insertAt")
         }
     }
 
