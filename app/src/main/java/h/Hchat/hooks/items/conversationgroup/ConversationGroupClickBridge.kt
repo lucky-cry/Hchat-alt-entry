@@ -51,6 +51,7 @@ internal object ConversationGroupClickBridge {
         WeakHashMap<Activity, OnBackPressedCallback>()
     )
     private val backGuardUntil = Collections.synchronizedMap(WeakHashMap<Activity, Long>())
+    private val activeGroupTalkers = Collections.synchronizedMap(WeakHashMap<Activity, String>())
     private val avatarClient by lazy { OkHttpClient() }
     private val avatarCache = ConcurrentHashMap<String, Bitmap>()
     private val avatarExecutor = Executors.newFixedThreadPool(2)
@@ -239,6 +240,10 @@ internal object ConversationGroupClickBridge {
                     val activity = param.thisObject as? Activity ?: return
                     if (activeOverlays.containsKey(activity)) {
                         ensureBackCallback(activity)
+                        activeGroupTalkers[activity]?.let { talker ->
+                            // 从群聊返回时重建分组页，刷新最新消息/时间/未读。
+                            showGroupPageOverlay(activity, talker, refresh = true)
+                        }
                     }
                 }
             })
@@ -313,6 +318,7 @@ internal object ConversationGroupClickBridge {
 
     private fun removeGroupPage(activity: Activity?): Boolean {
         activity ?: return false
+        activeGroupTalkers.remove(activity)
         backCallbacks.remove(activity)?.remove()
         val view = activeOverlays.remove(activity) ?: return false
         (view.parent as? ViewGroup)?.removeView(view)
@@ -459,12 +465,17 @@ internal object ConversationGroupClickBridge {
         return ok
     }
 
-    private fun showGroupPageOverlay(activity: Activity, talker: String) {
+    private fun showGroupPageOverlay(
+        activity: Activity,
+        talker: String,
+        refresh: Boolean = false
+    ) {
         val group = ConversationGroupStore.load(activity)
             .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
         val decor = activity.window?.decorView as? ViewGroup ?: return
-        activeOverlays[activity]?.let { existing ->
-            existing.bringToFront()
+        val previous = activeOverlays[activity]
+        if (previous != null && !refresh) {
+            previous.bringToFront()
             ensureBackCallback(activity)
             return
         }
@@ -672,7 +683,11 @@ internal object ConversationGroupClickBridge {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             ))
+            if (previous != null && previous !== page) {
+                decor.removeView(previous)
+            }
             activeOverlays[activity] = page
+            activeGroupTalkers[activity] = talker
             page.bringToFront()
             ensureBackCallback(activity)
             val observer = decor.viewTreeObserver
