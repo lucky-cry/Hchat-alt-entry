@@ -88,13 +88,6 @@ public class ModuleEntry {
         // 平板模式需要在微信所有进程保持一致，避免升级/降级后登录态校验看到不同设备形态。
         installTabletEarlyHook(lpparam);
 
-        // 聊天分组点击桥必须早于首页 RecyclerView 创建。
-        try {
-            ConversationGroupClickBridge.INSTANCE.installEarly(lpparam.classLoader);
-        } catch (Throwable e) {
-            HLog.e(TAG + " 聊天分组早期点击桥安装失败: " + e.getMessage(), e);
-        }
-
         // 2. 子进程只安装明确需要的最小 Hook。
         if (!isMainProcess(lpparam)) {
             if (isAppBrandProcess(lpparam)) {
@@ -139,6 +132,12 @@ public class ModuleEntry {
                                 ConversationTabsFeature.installEarly(resolveHostClassLoader(app, lpparam));
                             } catch (Throwable e) {
                                 HLog.e(TAG + " 标签分组早期安装失败", e);
+                            }
+                            try {
+                                ConversationGroupClickBridge.INSTANCE.installEarly(
+                                        resolveHostClassLoader(app, lpparam));
+                            } catch (Throwable e) {
+                                HLog.e(TAG + " 聊天分组点击桥早期安装失败", e);
                             }
                             // 悬浮入口不依赖 DexKit，先注册生命周期，避免错过首个 Activity。
                             try {

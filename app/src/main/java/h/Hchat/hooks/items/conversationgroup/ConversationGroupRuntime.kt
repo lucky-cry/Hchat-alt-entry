@@ -205,6 +205,7 @@ object ConversationGroupRuntime {
         val homeProjectionInstalled = true
         initializeRuntimeLight(context)
         val generation = lifecycleGeneration.get()
+        HLog.e("$TAG 安装 query Hook")
         val queryInstalled = hook(query, object : HookCallback {
             override fun after(param: HookParam) {
                 if (isExpandingShareRecentQuery()) return
@@ -222,6 +223,7 @@ object ConversationGroupRuntime {
                 param.result = reorderVirtualGroupRows(filterProjectedOfficialRows(context.hostContext(), cursor), rootGroups)
             }
         })
+        HLog.e("$TAG query Hook 完成=$queryInstalled")
         val shareRecentAdapterInstalled = hook(
             shareRecentAdapterReset,
             object : HookCallback {

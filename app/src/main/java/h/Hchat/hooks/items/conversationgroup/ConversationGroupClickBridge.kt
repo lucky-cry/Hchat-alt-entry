@@ -63,9 +63,37 @@ internal object ConversationGroupClickBridge {
                 })
             }.isSuccess
         ) ok = true
-        if (ok) installed = true
-        HLog.e("$TAG 点击桥早期安装: ctor/setAdapter=$ok")
-        return ok
+        // 8.0.80 首页可能仍保留 b3.onItemClick 作为兼容点击入口。
+        val legacyClickClass = KavaReflector.loadClass(
+            "com.tencent.mm.ui.conversation.b3",
+            classLoader
+        )
+        val legacyClick = legacyClickClass?.let { clazz ->
+            KavaReflector.declaredMethods(clazz).firstOrNull {
+                it.name == "onItemClick" &&
+                    it.parameterTypes.size == 4 &&
+                    it.parameterTypes[2] == java.lang.Integer.TYPE
+            }
+        }
+        val legacyInstalled = legacyClick?.let { method ->
+            runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
+                        val adapter = param.args?.getOrNull(0) as? android.widget.AdapterView<*> ?: return
+                        val position = (param.args?.getOrNull(2) as? Int) ?: return
+                        val item = runCatching { adapter.getItemAtPosition(position) }.getOrNull() ?: return
+                        val talker = virtualTalker(item) ?: return
+                        HLog.e("$TAG 旧点击入口命中: talker=$talker")
+                        val activity = findActivity(adapter.context) ?: return
+                        param.result = null
+                        openGroup(activity, talker)
+                    }
+                })
+            }.isSuccess
+        } ?: false
+        if (ok || legacyInstalled) installed = true
+        HLog.e("$TAG 点击桥早期安装: ctor/setAdapter=$ok legacy=$legacyInstalled")
+        return ok || legacyInstalled
     }
 
     fun install(context: FeatureContext): Boolean {
@@ -225,6 +253,18 @@ internal object ConversationGroupClickBridge {
         }
     }
 
+    private fun openGroup(activity: Activity, talker: String) {
+        runCatching {
+            activity.startActivity(
+                Intent().setClassName(activity, CHATTING_UI).also {
+                    it.putExtra(CHAT_USER, talker)
+                }
+            )
+        }.onFailure {
+            HLog.e("$TAG 点击桥打开分组失败: ${it.message}", it)
+        }
+    }
+
     private fun attach(recyclerView: RecyclerView) {
         if (!installedViews.add(recyclerView)) return
         HLog.e("$TAG 点击桥挂载 RecyclerView: ${recyclerView.javaClass.name}")
@@ -239,15 +279,7 @@ internal object ConversationGroupClickBridge {
                 val talker = virtualTalker(data.getOrNull(position)) ?: return false
                 val activity = findActivity(rv.context) ?: return false
                 HLog.e("$TAG 点击桥命中: talker=$talker")
-                runCatching {
-                    activity.startActivity(
-                        Intent().setClassName(activity, CHATTING_UI).also {
-                            it.putExtra(CHAT_USER, talker)
-                        }
-                    )
-                }.onFailure {
-                    HLog.e("$TAG 点击桥打开分组失败: ${it.message}", it)
-                }
+                openGroup(activity, talker)
                 return true
             }
         })
