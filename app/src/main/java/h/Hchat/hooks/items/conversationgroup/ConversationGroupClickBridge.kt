@@ -214,32 +214,46 @@ internal object ConversationGroupClickBridge {
     }
 
     private fun showGroupDialog(activity: Activity, talker: String) {
-        val group = ConversationGroupStore.load(activity)
-            .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
+        HLog.e("$TAG 准备显示分组列表: talker=$talker")
+        val all = ConversationGroupStore.load(activity)
+        HLog.e("$TAG 分组数量=${all.size} ids=${all.joinToString { it.id }}")
+        val group = all.firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker }
+        if (group == null) {
+            HLog.e("$TAG 找不到 talker 对应分组: $talker")
+            return
+        }
+        HLog.e("$TAG 分组子会话=${group.conversationIds.size}")
         val contacts = WeChatApis.contact()?.contacts()
         val names = group.conversationIds.map { conversation ->
             contacts?.getDisplayName(conversation)?.takeIf { it.isNotBlank() } ?: conversation
         }
         if (names.isEmpty()) {
-            android.widget.Toast.makeText(activity, "分组内没有会话", android.widget.Toast.LENGTH_SHORT).show()
+            HLog.e("$TAG 分组内没有会话")
             return
         }
-        android.app.AlertDialog.Builder(activity)
-            .setTitle(group.name.ifBlank { "聊天分组" })
-            .setItems(names.toTypedArray()) { _, index ->
-                val child = group.conversationIds.getOrNull(index) ?: return@setItems
-                runCatching {
-                    activity.startActivity(
-                        Intent().setClassName(activity, CHATTING_UI).also {
-                            it.putExtra(CHAT_USER, child)
+        activity.runOnUiThread {
+            runCatching {
+                android.app.AlertDialog.Builder(activity)
+                    .setTitle(group.name.ifBlank { "聊天分组" })
+                    .setItems(names.toTypedArray()) { _, index ->
+                        val child = group.conversationIds.getOrNull(index) ?: return@setItems
+                        runCatching {
+                            activity.startActivity(
+                                Intent().setClassName(activity, CHATTING_UI).also {
+                                    it.putExtra(CHAT_USER, child)
+                                }
+                            )
+                        }.onFailure {
+                            HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
                         }
-                    )
-                }.onFailure {
-                    HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
-                }
+                    }
+                    .setNegativeButton("关闭", null)
+                    .show()
+                HLog.e("$TAG 分组列表弹窗已显示")
+            }.onFailure {
+                HLog.e("$TAG 分组列表弹窗失败: ${it.message}", it)
             }
-            .setNegativeButton("关闭", null)
-            .show()
+        }
     }
 
     private fun findVirtualField(target: Any): String? {
