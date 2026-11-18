@@ -37,6 +37,7 @@ internal object ConversationGroupClickBridge {
     private const val CHAT_USER = "Chat_User"
 
     private val installedViews = Collections.newSetFromMap(WeakHashMap<RecyclerView, Boolean>())
+    private val activeOverlays = Collections.synchronizedMap(WeakHashMap<Activity, View>())
     @Volatile private var installed = false
 
     /** 在 ModuleEntry.bootstrap 阶段调用：早于微信首页 RecyclerView 创建。 */
@@ -239,6 +240,7 @@ internal object ConversationGroupClickBridge {
         activity.runOnUiThread {
             runCatching {
                 val decor = activity.window?.decorView as? ViewGroup ?: return@runOnUiThread
+                if (activeOverlays.containsKey(activity)) return@runOnUiThread
                 val density = activity.resources.displayMetrics.density
                 fun dp(value: Int) = (value * density).toInt()
                 val overlay = FrameLayout(activity).apply {
@@ -265,6 +267,7 @@ internal object ConversationGroupClickBridge {
                         isClickable = true
                         setOnClickListener {
                             decor.removeView(overlay)
+                            activeOverlays.remove(activity)
                             runCatching {
                                 activity.startActivity(
                                     Intent().setClassName(activity, CHATTING_UI).also {
@@ -284,7 +287,10 @@ internal object ConversationGroupClickBridge {
                     setTextColor(Color.DKGRAY)
                     setPadding(0, dp(10), 0, 0)
                     isClickable = true
-                    setOnClickListener { decor.removeView(overlay) }
+                    setOnClickListener {
+                        decor.removeView(overlay)
+                        activeOverlays.remove(activity)
+                    }
                 })
                 overlay.addView(panel, FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
@@ -298,6 +304,7 @@ internal object ConversationGroupClickBridge {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 ))
+                activeOverlays[activity] = overlay
                 HLog.e("$TAG 分组列表浮层已显示")
             }.onFailure {
                 HLog.e("$TAG 分组列表浮层失败: ${it.message}", it)

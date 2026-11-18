@@ -138,6 +138,7 @@ public class ModuleEntry {
                                 ConversationGroupClickBridge.INSTANCE.installEarly(groupLoader);
                                 ConversationGroupClickBridge.INSTANCE.installChattingRedirect(groupLoader);
                                 ConversationGroupClickBridge.INSTANCE.installChattingFragmentRedirect(groupLoader);
+                                ConversationGroupClickBridge.INSTANCE.installFragmentWatcher(groupLoader);
                             } catch (Throwable e) {
                                 HLog.e(TAG + " 聊天分组点击桥早期安装失败", e);
                             }
