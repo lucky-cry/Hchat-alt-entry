@@ -562,6 +562,9 @@ internal object ConversationGroupClickBridge {
                     (detail["unReadCount"] as? Number)?.toInt() ?: 0,
                     (detail["unReadMuteCount"] as? Number)?.toInt() ?: 0
                 )
+                val muted = runCatching {
+                    WeChatApis.conversations()?.getWechatDoNotDisturbState(id)
+                }.getOrNull() ?: (((detail["unReadMuteCount"] as? Number)?.toInt() ?: 0) > 0)
                 val avatarUrl = contacts?.getAvatarUrl(id).orEmpty()
                 val avatarColor =
                     if (id.endsWith("@chatroom")) Color.rgb(87, 160, 92)
@@ -623,18 +626,30 @@ internal object ConversationGroupClickBridge {
                     setTextColor(Color.rgb(170, 170, 170))
                 })
                 if (unread > 0) {
-                    right.addView(TextView(activity).apply {
-                        this.text = if (unread > 99) "99+" else unread.toString()
-                        textSize = 10f
-                        gravity = Gravity.CENTER
-                        setTextColor(Color.WHITE)
-                        background = android.graphics.drawable.GradientDrawable().apply {
-                            shape = android.graphics.drawable.GradientDrawable.OVAL
-                            setColor(Color.rgb(230, 70, 70))
-                        }
-                    }, LinearLayout.LayoutParams(dp(18), dp(18)).apply {
-                        topMargin = dp(4)
-                    })
+                    if (muted) {
+                        // 免打扰会话和微信首页一致：只显示红点，不显示数字。
+                        right.addView(View(activity).apply {
+                            background = android.graphics.drawable.GradientDrawable().apply {
+                                shape = android.graphics.drawable.GradientDrawable.OVAL
+                                setColor(Color.rgb(230, 70, 70))
+                            }
+                        }, LinearLayout.LayoutParams(dp(8), dp(8)).apply {
+                            topMargin = dp(4)
+                        })
+                    } else {
+                        right.addView(TextView(activity).apply {
+                            this.text = if (unread > 99) "99+" else unread.toString()
+                            textSize = 10f
+                            gravity = Gravity.CENTER
+                            setTextColor(Color.WHITE)
+                            background = android.graphics.drawable.GradientDrawable().apply {
+                                shape = android.graphics.drawable.GradientDrawable.OVAL
+                                setColor(Color.rgb(230, 70, 70))
+                            }
+                        }, LinearLayout.LayoutParams(dp(18), dp(18)).apply {
+                            topMargin = dp(4)
+                        })
+                    }
                 }
                 row.addView(right, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
