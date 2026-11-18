@@ -182,7 +182,10 @@ internal object ConversationGroupClickBridge {
         var installed = runCatching {
             HookRegistry.get().hook(onBackPressed, object : HookCallback {
                 override fun before(param: HookParam) {
-                    removeGroupPage(param.thisObject as? Activity)
+                    val activity = param.thisObject as? Activity ?: return
+                    if (removeGroupPage(activity)) {
+                        KavaReflector.invokeMethod(activity, "closeChatting", true)
+                    }
                 }
             })
         }.isSuccess
@@ -197,7 +200,11 @@ internal object ConversationGroupClickBridge {
                         if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK &&
                             event.action == android.view.KeyEvent.ACTION_UP
                         ) {
-                            removeGroupPage(param.thisObject as? Activity)
+                            val activity = param.thisObject as? Activity ?: return
+                            if (removeGroupPage(activity)) {
+                                KavaReflector.invokeMethod(activity, "closeChatting", true)
+                                param.result = true
+                            }
                         }
                     }
                 })
@@ -206,11 +213,11 @@ internal object ConversationGroupClickBridge {
         return installed
     }
 
-    private fun removeGroupPage(activity: Activity?) {
-        activity ?: return
-        activeOverlays.remove(activity)?.let { view ->
-            (view.parent as? ViewGroup)?.removeView(view)
-        }
+    private fun removeGroupPage(activity: Activity?): Boolean {
+        activity ?: return false
+        val view = activeOverlays.remove(activity) ?: return false
+        (view.parent as? ViewGroup)?.removeView(view)
+        return true
     }
 
     /** 每次打开聊天都会走 ChattingUIProxy.onInit，用它覆盖第二次及以后打开。 */
