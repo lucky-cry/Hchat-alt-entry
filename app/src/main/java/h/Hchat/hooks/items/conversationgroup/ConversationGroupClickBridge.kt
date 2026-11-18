@@ -4,9 +4,13 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
@@ -66,19 +70,100 @@ internal object ConversationGroupClickBridge {
                         override fun after(param: HookParam) {
                             val holder = param.args?.getOrNull(0) ?: return
                             val itemView = KavaReflector.readField(holder, "itemView") as? View ?: return
+                            itemView.post {
+                                (itemView.parent as? RecyclerView)?.let(::attach)
+                            }
+                        }
+                    })
+                }.isSuccess
+            } ?: false
+            val viewAttached = KavaReflector.declaredMethods(adapterClass).firstOrNull {
+                it.name == "onViewAttachedToWindow" && it.parameterTypes.size == 1
+            }
+            val viewAttachedInstalled = viewAttached?.let { method ->
+                runCatching {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            val holder = param.args?.getOrNull(0) ?: return
+                            val itemView = KavaReflector.readField(holder, "itemView") as? View ?: return
                             (itemView.parent as? RecyclerView)?.let(::attach)
                         }
                     })
                 }.isSuccess
             } ?: false
-            installed = attachInstalled || bindInstalled
-            HLog.e("$TAG 点击桥: attach=$attachInstalled bind=$bindInstalled")
+            // 首页 RecyclerView 在桥安装前已经 attach，onAttached 不会再触发；
+            // 再挂一个 onLayout，保证现有 RecyclerView 也能补上监听。
+            val recyclerClass = KavaReflector.loadClass(
+                "androidx.recyclerview.widget.RecyclerView",
+                context.hostClassLoader()
+            )
+            val onLayout = recyclerClass?.let { clazz ->
+                KavaReflector.declaredMethods(clazz).firstOrNull {
+                    it.name == "onLayout" && it.parameterTypes.size == 4
+                }
+            }
+            val layoutInstalled = onLayout?.let { method ->
+                runCatching {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            (param.thisObject as? RecyclerView)?.let(::attach)
+                        }
+                    })
+                }.isSuccess
+            } ?: false
+            installed = attachInstalled || bindInstalled || layoutInstalled || viewAttachedInstalled
+            HLog.e(
+                "$TAG 点击桥: attach=$attachInstalled bind=$bindInstalled layout=$layoutInstalled " +
+                    "viewAttached=$viewAttachedInstalled"
+            )
+            val launcherClass = KavaReflector.loadClass(
+                "com.tencent.mm.ui.LauncherUI",
+                context.hostClassLoader()
+            )
+            val onResume = launcherClass?.let { clazz ->
+                KavaReflector.declaredMethods(clazz).firstOrNull {
+                    it.name == "onResume" && it.parameterTypes.isEmpty()
+                }
+            }
+            onResume?.let { method ->
+                runCatching {
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun after(param: HookParam) {
+                            (param.thisObject as? Activity)?.let(::attachActivity)
+                        }
+                    })
+                }
+            }
+            val main = Handler(Looper.getMainLooper())
+            listOf(500L, 1500L, 3000L).forEach { delay ->
+                main.postDelayed({ attachCurrentWindow() }, delay)
+            }
             return installed
+        }
+    }
+
+    private fun attachCurrentWindow() {
+        val activity = WeChatApis.currentActivity()?.currentActivity() as? Activity ?: return
+        attachActivity(activity)
+    }
+
+    private fun attachActivity(activity: Activity) {
+        val decor = activity.window?.decorView ?: return
+        walk(decor)
+    }
+
+    private fun walk(view: View) {
+        if (view is RecyclerView) {
+            attach(view)
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) walk(view.getChildAt(i))
         }
     }
 
     private fun attach(recyclerView: RecyclerView) {
         if (!installedViews.add(recyclerView)) return
+        HLog.e("$TAG 点击桥挂载 RecyclerView: ${recyclerView.javaClass.name}")
         recyclerView.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
             override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
                 if (e.action != MotionEvent.ACTION_UP) return false
