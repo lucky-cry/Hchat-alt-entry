@@ -52,6 +52,8 @@ internal object ConversationGroupClickBridge {
     )
     private val backGuardUntil = Collections.synchronizedMap(WeakHashMap<Activity, Long>())
     private val activeGroupTalkers = Collections.synchronizedMap(WeakHashMap<Activity, String>())
+    private val closedGroupPages = Collections.synchronizedMap(WeakHashMap<Activity, Boolean>())
+    private val pendingUserGroups = Collections.synchronizedMap(WeakHashMap<Activity, String>())
     private val avatarClient by lazy { OkHttpClient() }
     private val avatarCache = ConcurrentHashMap<String, Bitmap>()
     private val avatarExecutor = Executors.newFixedThreadPool(2)
@@ -318,6 +320,7 @@ internal object ConversationGroupClickBridge {
 
     private fun removeGroupPage(activity: Activity?): Boolean {
         activity ?: return false
+        closedGroupPages[activity] = true
         activeGroupTalkers.remove(activity)
         backCallbacks.remove(activity)?.remove()
         val view = activeOverlays.remove(activity) ?: return false
@@ -468,8 +471,16 @@ internal object ConversationGroupClickBridge {
     private fun showGroupPageOverlay(
         activity: Activity,
         talker: String,
-        refresh: Boolean = false
+        refresh: Boolean = false,
+        userOpen: Boolean = false
     ) {
+        val requestedByUser = userOpen || pendingUserGroups[activity] == talker
+        if (requestedByUser) {
+            pendingUserGroups.remove(activity)
+            closedGroupPages.remove(activity)
+        } else if (closedGroupPages[activity] == true) {
+            return
+        }
         val group = ConversationGroupStore.load(activity)
             .firstOrNull { ConversationGroupRuntime.virtualTalker(it.id) == talker } ?: return
         val decor = activity.window?.decorView as? ViewGroup ?: return
@@ -1164,6 +1175,7 @@ internal object ConversationGroupClickBridge {
     }
 
     private fun openGroup(activity: Activity, talker: String) {
+        pendingUserGroups[activity] = talker
         runCatching {
             activity.startActivity(
                 Intent().setClassName(activity, CHATTING_UI).also {
