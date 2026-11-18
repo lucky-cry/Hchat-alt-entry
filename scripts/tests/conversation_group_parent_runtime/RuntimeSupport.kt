@@ -1,10 +1,35 @@
 package h.Hchat.hooks.items.conversationgroup
 
+import android.content.Context
 import android.content.SharedPreferences
+import h.Hchat.hooks.api.runtime.WeChatDatabaseApi
 
 internal object ConversationGroupStore {
+    const val PREFS_NAME = "Hchat_conversation_groups"
     var account = "account-a"
+    var enabled = false
     fun accountKey(): String = account
+    fun isEnabled(context: Context): Boolean = enabled
+}
+
+internal object HchatStorage {
+    fun preferences(context: Context, name: String): SharedPreferences = context.preferences
+}
+
+internal object WeChatApis {
+    var currentDatabase: WeChatDatabaseApi? = null
+    fun database() = currentDatabase
+    fun conversations(): ConversationApi? = null
+
+    interface ConversationApi {
+        fun deleteConversation(talker: String): Boolean
+    }
+}
+
+internal object ConversationGroupHomeProjection {
+    fun refresh() {
+        WeChatApis.currentDatabase?.events?.add("refresh")
+    }
 }
 
 internal class MemoryPreferences(

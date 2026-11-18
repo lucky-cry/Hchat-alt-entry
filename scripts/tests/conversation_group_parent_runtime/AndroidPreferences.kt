@@ -1,5 +1,7 @@
 package android.content
 
+class Context(val preferences: SharedPreferences)
+
 interface SharedPreferences {
     fun getString(key: String, defaultValue: String?): String?
     fun edit(): Editor

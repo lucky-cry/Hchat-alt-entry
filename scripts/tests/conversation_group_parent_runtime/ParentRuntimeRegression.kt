@@ -1,5 +1,6 @@
 package h.Hchat.hooks.items.conversationgroup
 
+import android.content.Context
 import h.Hchat.hooks.api.runtime.WeChatDatabaseApi
 import org.json.JSONObject
 
@@ -148,5 +149,99 @@ fun main() {
     same(emptyMap<String, String>(), runtime.loadOriginalParentRefs(afterRestart, ACCOUNT), "restart retires stale backup")
     same(1, cleanupDb.updateCalls, "cleanup retry does not repeat native write")
 
+    checkDisabledSync()
     println("ConversationGroupParentRuntime: $checks assertions passed")
+}
+
+private fun checkDisabledSync() {
+    val runtime = ParentRuntimeUnderTest
+    val policy = ConversationGroupParentPolicy
+    val settings = """{"groups":[{"id":"a","conversationIds":["friend"],"conversationOrderIds":["friend"],"automaticGroupingEnabled":true}]}"""
+    val prefs = MemoryPreferences()
+    prefs.memory["groups_v1"] = settings
+    val lookalike = "wxidXhchatXgroupXa" // Matches the unescaped LIKE pattern.
+    val db = WeChatDatabaseApi(mapOf("friend" to "message_fold", lookalike to ""), prefs.events)
+    WeChatApis.currentDatabase = db
+    val context = Context(prefs)
+    val generation = runtime.activeGeneration
+    val assigned = mapOf("friend" to GROUP_A)
+    fun applyEnabledParentPlan() = runtime.applyParentPlan(db, prefs, ACCOUNT,
+        policy.plan(assigned, db.parents.filterKeys(assigned::containsKey), emptySet(),
+            runtime.loadOriginalParentRefs(prefs, ACCOUNT)))
+
+    // Start grouped, switch off, then feed the preserved assignment back through the enabled planner.
+    ConversationGroupStore.enabled = true
+    same(setOf("friend"), applyEnabledParentPlan(), "enable assigns the saved group")
+    db.parents[GROUP_A] = ""
+    db.contacts.add(GROUP_A)
+    db.avatars.add(GROUP_A)
+    ConversationGroupStore.enabled = false
+    runtime.syncDatabase(context, generation)
+    same(mapOf("friend" to "message_fold", lookalike to ""), db.parents, "disable restores parent and removes only the module row")
+    same(emptySet<String>(), db.contacts, "disable removes virtual contact")
+    same(emptySet<String>(), db.avatars, "disable removes virtual avatar")
+    same(listOf("commit:true", "update:friend:message_fold", "commit:true",
+        "delete:rconversation:$GROUP_A", "delete:rcontact:$GROUP_A", "delete:img_flag:$GROUP_A", "refresh"),
+        db.events.takeLast(7), "restore and persist before cleanup, refresh afterwards")
+    same(settings, prefs.disk["groups_v1"], "disable leaves membership, order and automatic settings intact")
+    ConversationGroupStore.enabled = true
+    same(setOf("friend"), applyEnabledParentPlan(), "re-enable planner reuses saved assignment")
+    same(GROUP_A, db.parents["friend"], "re-enable planner assigns the same parent")
+    ConversationGroupStore.enabled = false
+
+    val nativeDb = WeChatDatabaseApi(mapOf(
+        "gh_restored" to GROUP_A, "gh_untouched" to "service_officialaccounts",
+        "officialaccounts" to "", "service_officialaccounts" to "", GROUP_A to ""
+    ))
+    WeChatApis.currentDatabase = nativeDb
+    runtime.syncDatabase(Context(MemoryPreferences(originals("gh_restored" to "officialaccounts"))), generation)
+    same(mapOf(
+        "gh_restored" to "officialaccounts", "gh_untouched" to "service_officialaccounts",
+        "officialaccounts" to "", "service_officialaccounts" to ""
+    ), nativeDb.parents, "restore native official parent and preserve both native aggregate rows")
+
+    // Existing disabled install with stale virtual rows and no real children.
+    val startupDb = WeChatDatabaseApi(mapOf(GROUP_A to ""))
+    startupDb.contacts.add(GROUP_B)
+    WeChatApis.currentDatabase = startupDb
+    runtime.syncDatabase(Context(MemoryPreferences()), generation)
+    same(emptyMap<String, String>(), startupDb.parents, "already disabled startup removes leftover conversation")
+    same(emptySet<String>(), startupDb.contacts, "startup removes leftover virtual contact without conversation")
+    same(0, startupDb.updateCalls, "orphan cleanup needs no parent writes")
+
+    val recoveryPrefs = MemoryPreferences(originals("friend" to "", "second" to "message_fold"))
+    val recoveryDb = WeChatDatabaseApi(mapOf("friend" to GROUP_A, "second" to GROUP_B, GROUP_A to "", GROUP_B to ""))
+    WeChatApis.currentDatabase = recoveryDb
+    recoveryDb.failTalkers.add("second")
+    runtime.syncDatabase(Context(recoveryPrefs), generation)
+    same("", recoveryDb.parents["friend"], "successful parent is restored during a partial failure")
+    same(GROUP_B, recoveryDb.parents["second"], "failed parent stays in its group")
+    same(mapOf("second" to "message_fold"), runtime.loadOriginalParentRefs(recoveryPrefs, ACCOUNT),
+        "failed parent remains retryable")
+    same(emptyList<String>(), recoveryDb.events.filter { it.startsWith("delete:") },
+        "partial failure prevents all virtual row deletion")
+    recoveryDb.failTalkers.clear()
+    runtime.syncDatabase(Context(recoveryPrefs), generation)
+    same(mapOf("friend" to "", "second" to "message_fold"), recoveryDb.parents, "retry restores before deleting groups")
+
+    val unresolvedDb = WeChatDatabaseApi(mapOf("unknown" to GROUP_A, GROUP_A to ""))
+    WeChatApis.currentDatabase = unresolvedDb
+    runtime.syncDatabase(Context(MemoryPreferences()), generation)
+    same(mapOf("unknown" to GROUP_A, GROUP_A to ""), unresolvedDb.parents, "missing backup keeps group and conversation")
+
+    // A completed parent update alone does not authorize deleting rows from a stale sync.
+    for (invalidate in listOf<() -> Unit>(
+        { ConversationGroupStore.account = "account-b" },
+        { runtime.activeGeneration++ },
+        { ConversationGroupStore.enabled = true }
+    )) {
+        val staleDb = WeChatDatabaseApi(mapOf("friend" to GROUP_A, GROUP_A to ""))
+        staleDb.afterUpdate = invalidate
+        WeChatApis.currentDatabase = staleDb
+        runtime.syncDatabase(Context(MemoryPreferences(originals("friend" to ""))), generation)
+        same(mapOf("friend" to "", GROUP_A to ""), staleDb.parents, "invalidated sync leaves virtual row intact")
+        ConversationGroupStore.account = ACCOUNT
+        ConversationGroupStore.enabled = false
+        runtime.activeGeneration = generation
+    }
 }

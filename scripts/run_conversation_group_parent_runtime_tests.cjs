@@ -23,6 +23,7 @@ const compiler = [
 ];
 const root = path.resolve(__dirname, '..');
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'hchat-conversation-parent-runtime-tests-'));
+process.on('exit', () => fs.rmSync(output, {recursive: true, force: true}));
 const artifact = path.join(output, 'parent-runtime.jar');
 const java = process.env.JAVA || 'java';
 const production = 'app/src/main/java/h/Hchat/hooks/items/conversationgroup/';
@@ -35,17 +36,35 @@ function sourceBetween(start, end) {
 }
 const extracted = path.join(output, 'ParentRuntimeUnderTest.kt');
 fs.writeFileSync(extracted, `package h.Hchat.hooks.items.conversationgroup
+import android.content.Context
 import android.content.SharedPreferences
 import h.Hchat.utils.HLog
 import org.json.JSONObject
-import java.util.concurrent.ConcurrentHashMap
+import java.util.LinkedHashMap
 internal object ParentRuntimeUnderTest {
     private const val TAG = "ConversationGroupTest"
     private const val KEY_ORIGINAL_PARENT_REFS = "original_parent_refs"
-    private val parentRestoreFailures = ConcurrentHashMap.newKeySet<String>()
+    private const val PARENT_FAILURE_HISTORY_MAX = 4096
+    private const val PARENT_FAILURE_HISTORY_TTL_MS = 24 * 60 * 60 * 1000L
+    private const val VIRTUAL_PREFIX = "wxid_hchat_group_"
+    private val parentRestoreFailures = LinkedHashMap<String, Long>(128, 0.75f, true)
+    private val lifecycleLock = Any()
+    var activeGeneration = 1L
+    private var effectiveConversationSnapshot: Any? = null
+    private fun isRuntimeGenerationActive(generation: Long) = generation == activeGeneration
+    private fun isVirtualTalker(value: String?) = value?.startsWith(VIRTUAL_PREFIX) == true
+    private val automaticAvatarSources = mutableMapOf<String, String>()
+    private fun value(row: Map<String, String>, key: String) = row[key].orEmpty()
+    private data class ConversationParents(val parents: Map<String, String>)
+    private fun loadConversationParents(database: h.Hchat.hooks.api.runtime.WeChatDatabaseApi,
+        assigned: Set<String>) = ConversationParents(database.parents.filter { (talker, parent) ->
+        !isVirtualTalker(talker) && (talker in assigned || ConversationGroupParentPolicy.isModuleParent(parent))
+    })
     private fun updateParentRefs(database: h.Hchat.hooks.api.runtime.WeChatDatabaseApi,
         talkers: List<String>, parent: String): Boolean = database.updateParents(talkers, parent)
 ` + sourceBetween('    private fun applyParentPlan(', '    private fun syncDatabase(') +
+    sourceBetween('    private fun syncDatabase(', '        var groups = ConversationGroupStore.load(context)') + '    }\n' +
+    sourceBetween('    private fun cleanupVirtualRows(', '    private fun updateParentRefs(') +
     sourceBetween('    private fun loadOriginalParentRefs(', '    private fun locateQueryMethod(') + '}\n');
 function run(args) {
     const result = spawnSync(java, args, {cwd: root, encoding: 'utf8', timeout: 60000});
@@ -60,4 +79,3 @@ run(['-Xmx256m', '-cp', compiler.join(path.delimiter), 'org.jetbrains.kotlin.cli
     ...fs.readdirSync(path.join(root, tests)).filter(file => file.endsWith('.kt')).map(file => tests + file)]);
 run(['-cp', [artifact, stdlib, json].join(path.delimiter),
     'h.Hchat.hooks.items.conversationgroup.ParentRuntimeRegressionKt']);
-console.log('Test artifacts: ' + output);
