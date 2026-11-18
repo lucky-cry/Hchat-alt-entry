@@ -53,7 +53,7 @@ internal object ConversationGroupClickBridge {
     private val backGuardUntil = Collections.synchronizedMap(WeakHashMap<Activity, Long>())
     private val activeGroupTalkers = Collections.synchronizedMap(WeakHashMap<Activity, String>())
     private val closedGroupPages = Collections.synchronizedMap(WeakHashMap<Activity, Boolean>())
-    private val pendingUserGroups = Collections.synchronizedMap(WeakHashMap<Activity, String>())
+    private val pendingUserTalkers = Collections.synchronizedSet(HashSet<String>())
     private val avatarClient by lazy { OkHttpClient() }
     private val avatarCache = ConcurrentHashMap<String, Bitmap>()
     private val avatarExecutor = Executors.newFixedThreadPool(2)
@@ -142,6 +142,7 @@ internal object ConversationGroupClickBridge {
                     val activity = param.thisObject as? Activity ?: return
                     val talker = activity.intent?.getStringExtra(CHAT_USER) ?: return
                     if (!talker.startsWith(VIRTUAL_PREFIX)) return
+                    pendingUserTalkers.add(talker)
                     HLog.e("$TAG 拦截虚拟分组会话: talker=$talker")
                     runCatching {
                         activity.startActivity(
@@ -474,9 +475,8 @@ internal object ConversationGroupClickBridge {
         refresh: Boolean = false,
         userOpen: Boolean = false
     ) {
-        val requestedByUser = userOpen || pendingUserGroups[activity] == talker
+        val requestedByUser = userOpen || pendingUserTalkers.remove(talker)
         if (requestedByUser) {
-            pendingUserGroups.remove(activity)
             closedGroupPages.remove(activity)
         } else if (closedGroupPages[activity] == true) {
             return
@@ -1175,7 +1175,7 @@ internal object ConversationGroupClickBridge {
     }
 
     private fun openGroup(activity: Activity, talker: String) {
-        pendingUserGroups[activity] = talker
+        pendingUserTalkers.add(talker)
         runCatching {
             activity.startActivity(
                 Intent().setClassName(activity, CHATTING_UI).also {
