@@ -203,7 +203,7 @@ object ConversationGroupRuntime {
         // Hook，保证已存在的虚拟分组行可以点击进入分组页。
         HLog.e("$TAG 跳过首页投影 DexKit 安装")
         val homeProjectionInstalled = true
-        initializeRuntime(context)
+        initializeRuntimeLight(context)
         val generation = lifecycleGeneration.get()
         val queryInstalled = hook(query, object : HookCallback {
             override fun after(param: HookParam) {
@@ -453,6 +453,30 @@ object ConversationGroupRuntime {
         return if (snapshot.account == ConversationGroupStore.accountKey() && snapshot.groups == groups) {
             snapshot.conversationIds
         } else emptyMap()
+    }
+
+    /**
+     * 轻量版：只建立配置监听并异步同步，不在这里订阅微信变更 API。
+     * 8.0.80 上 WeChatApis.xxxChanges().subscribe 会在安装线程里等待服务就绪，
+     * 导致整个分组 Hook 安装卡死。
+     */
+    private fun initializeRuntimeLight(context: FeatureContext) {
+        if (!initialized.compareAndSet(false, true)) return
+        runtimeActive = true
+        lifecycleGeneration.incrementAndGet()
+        val generation = lifecycleGeneration.get()
+        val prefs = HchatStorage.preferences(context.hostContext(), ConversationGroupStore.PREFS_NAME)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (runtimeActive && generation == lifecycleGeneration.get() &&
+                (key == ConversationGroupStore.KEY_ENABLE || key == ConversationGroupStore.KEY_DATA)
+            ) {
+                syncAsync(context.hostContext())
+            }
+        }
+        preferenceListener = listener
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        HLog.e("$TAG 轻量运行时初始化完成")
+        syncAsync(context.hostContext())
     }
 
     private fun initializeRuntime(context: FeatureContext) {
