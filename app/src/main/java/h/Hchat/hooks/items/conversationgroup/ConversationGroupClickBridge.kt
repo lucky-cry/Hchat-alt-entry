@@ -489,8 +489,8 @@ internal object ConversationGroupClickBridge {
                         val child = rows.getOrNull(index)?.first
                         if (child != null) {
                             HLog.e("$TAG 点击分组行: id=$child")
-                            decor.removeView(page)
-                            activeOverlays.remove(activity)
+                            // 保持分组页在底下，等目标聊天 Activity 盖上来；
+                            // 先移除会露出原生“非好友”页，造成闪烁。
                             runCatching {
                                 activity.startActivity(
                                     Intent().setClassName(activity, CHATTING_UI).also {
