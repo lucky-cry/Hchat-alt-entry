@@ -7527,9 +7527,8 @@ internal fun AboutCard(context: Context) {
     var updateInfo by remember { mutableStateOf<ModuleUpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf("") }
-    var historyItems by remember { mutableStateOf<List<ModuleVersionHistory>>(emptyList()) }
-    var showHistoryDialog by remember { mutableStateOf(false) }
-    var historyError by remember { mutableStateOf("") }
+    // 历史版本统一跳转到本项目自己的 Release 页面，更新说明和下载都在该页面查看。
+    val historyUrl = "https://github.com/lucky-cry/Hchat-alt-entry/releases"
     val updatePrefs = remember { HchatStorage.preferences(context, MODULE_UPDATE_PREFS) }
     val checkForUpdate: () -> Unit = {
         updateError = "正在检查更新…"
@@ -7558,21 +7557,8 @@ internal fun AboutCard(context: Context) {
         }
     }
     val openHistory: () -> Unit = {
-        historyError = "正在加载历史版本…"
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                PluginMarketClient.moduleVersionHistory(context).map { values ->
-                    values.map { ModuleVersionHistory.fromJson(it, PluginMarketSettings.serviceUrl(context)) }
-                }
-            }
-            result.onSuccess {
-                historyItems = it
-                historyError = if (it.isEmpty()) "暂无历史版本" else ""
-                showHistoryDialog = true
-            }.onFailure {
-                historyError = "加载失败：${it.message ?: "网络不可用"}"
-                showHistoryDialog = true
-            }
+        runCatching {
+            activity?.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(historyUrl)))
         }
     }
     SettingsCard {
@@ -7600,29 +7586,6 @@ internal fun AboutCard(context: Context) {
                 activity?.startActivity(intent)
             }
         }
-    }
-    if (showHistoryDialog) {
-        WindowDialog(
-            show = true,
-            title = "历史版本",
-            onDismissRequest = { showHistoryDialog = false },
-            content = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    if (historyError.isNotBlank()) {
-                        Text(historyError, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
-                    }
-                    historyItems.forEachIndexed { index, version ->
-                        if (index > 0) InsetDivider(start = 0.dp)
-                        Text("${version.versionName}（${version.versionCode}）", color = MiuixTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
-                        Text(version.releaseNotes.ifBlank { "暂无更新说明" }, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                        Text(formatFileSize(version.size), color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                        TextButton("下载此版本", onClick = {
-                            activity?.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(version.downloadUrl)))
-                        }, colors = ButtonDefaults.textButtonColorsPrimary())
-                    }
-                }
-            }
-        )
     }
     if (showUpdateDialog) {
         updateInfo?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }?.let { update ->
