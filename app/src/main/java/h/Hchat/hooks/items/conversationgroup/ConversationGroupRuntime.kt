@@ -1895,7 +1895,11 @@ object ConversationGroupRuntime {
                     (officialProjectionChanged || it.first.id in virtualRows.changedGroupIds)
             }
         )
-        if (officialProjectionChanged || homeProjectionChanged) {
+        if (officialProjectionChanged || homeProjectionChanged ||
+            virtualRows.changedGroupIds.isNotEmpty()
+        ) {
+            // 虚拟分组行的预览/时间/未读变化也要刷新首页缓存，
+            // 否则原生首页仍显示旧摘要。
             ConversationGroupHomeProjection.refresh()
         }
         // Never remove a parent row while a real conversation still needs recovery.
