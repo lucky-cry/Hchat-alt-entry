@@ -552,6 +552,15 @@ internal object ConversationTabsRuntime {
                     }
                     hideBlankListHeader(rv)
                 }, 350L)
+                main.postDelayed({
+                    HLog.e("$TAG 列表诊断: childCount=${rv.childCount} height=${rv.height} " +
+                        "adapter=${rv.adapter?.javaClass?.name} itemCount=${rv.adapter?.itemCount}")
+                    for (i in 0 until rv.childCount) {
+                        val c = rv.getChildAt(i)
+                        HLog.e("$TAG 子项[$i]: class=${c.javaClass.name} h=${c.height} " +
+                            "pos=${rv.getChildAdapterPosition(c)} parent=${c.parent?.javaClass?.name}")
+                    }
+                }, 1200L)
             }
         }
     }
