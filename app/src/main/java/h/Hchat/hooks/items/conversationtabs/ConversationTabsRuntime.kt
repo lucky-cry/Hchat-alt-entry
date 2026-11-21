@@ -328,7 +328,7 @@ internal object ConversationTabsRuntime {
         val actionBar = host.actionBar
         val list = host.list
         val stripHeight = host.strip.measuredHeight
-        findRecyclerView(list)?.let { rv ->
+        (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
             hideBlankListHeader(rv)
             // 原生空态可能把首页内容整体塞进 paddingTop；它不在 LayoutParams
             // 上，必须在每次布局时纠正，否则分类切换后整页只剩空白。
@@ -518,12 +518,9 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
-            val actualRecycler = findRecyclerView(list)
-            HLog.e("$TAG 列表对象: list=${list?.javaClass?.name} recycler=${actualRecycler?.javaClass?.name} " +
-                "children=${actualRecycler?.childCount}")
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
             // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
-            actualRecycler?.let { rv ->
+            (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
                 rv.stopScroll()
                 (rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)?.let { lm ->
                     // 首页是顶部对齐列表；空态/筛选后若被设成 stackFromEnd，
@@ -555,48 +552,8 @@ internal object ConversationTabsRuntime {
                     }
                     hideBlankListHeader(rv)
                 }, 350L)
-                main.postDelayed({
-                    HLog.e("$TAG 列表诊断: childCount=${rv.childCount} height=${rv.height} " +
-                        "adapter=${rv.adapter?.javaClass?.name} itemCount=${rv.adapter?.itemCount}")
-                    for (i in 0 until rv.childCount) {
-                        val c = rv.getChildAt(i)
-                        HLog.e("$TAG 子项[$i]: class=${c.javaClass.name} h=${c.height} " +
-                            "pos=${rv.getChildAdapterPosition(c)} parent=${c.parent?.javaClass?.name}")
-                    }
-                }, 1200L)
             }
         }
-    }
-
-    private fun findRecyclerView(view: View?): androidx.recyclerview.widget.RecyclerView? {
-        view ?: return null
-        val visited = HashSet<Int>()
-        val queue = ArrayDeque<Pair<Any, Int>>()
-        queue.add(view to 0)
-        while (queue.isNotEmpty()) {
-            val (value, depth) = queue.removeFirst()
-            if (!visited.add(System.identityHashCode(value))) continue
-            if (value is androidx.recyclerview.widget.RecyclerView) return value
-            if (value is ViewGroup) {
-                for (index in 0 until value.childCount) {
-                    queue.add(value.getChildAt(index) to depth + 1)
-                }
-            }
-            if (depth >= 2) continue
-            var current: Class<*>? = value.javaClass
-            while (current != null && current != Any::class.java) {
-                for (field in KavaReflector.declaredFields(current)) {
-                    if (KavaReflector.isStatic(field) || field.type.isPrimitive ||
-                        field.type == String::class.java
-                    ) continue
-                    val child = runCatching { KavaReflector.readField(field, value) }.getOrNull() ?: continue
-                    if (child is android.content.Context) continue
-                    queue.add(child to depth + 1)
-                }
-                current = current.superclass
-            }
-        }
-        return null
     }
 
     private fun hideBlankListHeader(rv: androidx.recyclerview.widget.RecyclerView) {
