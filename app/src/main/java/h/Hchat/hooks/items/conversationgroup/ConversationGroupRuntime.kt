@@ -371,6 +371,7 @@ object ConversationGroupRuntime {
     /** 删除分组配置后立即清掉对应虚拟行，避免首页残留可点击的空壳。 */
     fun removeGroupNow(context: Context, groupId: String) {
         val talker = virtualTalker(groupId)
+        HLog.e("$TAG removeGroupNow: id=$groupId talker=$talker")
         val database = WeChatApis.database()
         if (database != null) {
             runCatching { WeChatApis.conversations()?.deleteConversation(talker) }

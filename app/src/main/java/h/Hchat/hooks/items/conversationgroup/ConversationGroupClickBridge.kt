@@ -259,6 +259,9 @@ internal object ConversationGroupClickBridge {
             HookRegistry.get().hook(onResume, object : HookCallback {
                 override fun after(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
+                    // 从子聊天/设置页回到首页时强制同步一次，保证删除分组、
+                    // 新消息预览都能立即落到微信首页。
+                    ConversationGroupRuntime.syncAsync(activity)
                     if (activeOverlays.containsKey(activity)) {
                         ensureBackCallback(activity)
                         activeGroupTalkers[activity]?.let { talker ->
