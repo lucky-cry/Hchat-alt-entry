@@ -205,11 +205,22 @@ object ConversationGroupRuntime {
         val conversationMenu: Method? = null
         parentUpdateMethod = parentUpdate
         nativeGroupRefreshMethod = nativeGroupRefresh
-        // 首页投影在 8.0.80 上会卡在 DexKit 定位；先只安装核心查询/点击
-        // Hook，保证已存在的虚拟分组行可以点击进入分组页。
-        HLog.e("$TAG 跳过首页投影 DexKit 安装")
+        // 首页投影的 DexKit 定位在 8.0.80 上可能很慢，不能阻塞核心 Hook；
+        // 放到后台安装，安装完成后 refresh() 才能真正通知原生首页适配器。
         val homeProjectionInstalled = true
         initializeRuntimeLight(context)
+        Thread({
+            val installed = runCatching {
+                ConversationGroupHomeProjection.install(context) {
+                    effectiveConversationSnapshot?.hiddenHomeIds.orEmpty()
+                }
+            }.onFailure { HLog.e("$TAG 首页投影异步安装失败: ${it.message}", it) }.getOrDefault(false)
+            HLog.e("$TAG 首页投影异步安装=$installed")
+            if (installed) ConversationGroupHomeProjection.refresh()
+        }, "Hchat-GroupHomeProjection").apply {
+            isDaemon = true
+            start()
+        }
         val generation = lifecycleGeneration.get()
         HLog.e("$TAG 安装 query Hook")
         val queryInstalled = hook(query, object : HookCallback {
