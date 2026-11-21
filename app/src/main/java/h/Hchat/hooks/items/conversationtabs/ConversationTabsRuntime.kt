@@ -518,6 +518,23 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
+            (list as? ViewGroup)?.let { group ->
+                for (index in 0 until group.childCount) {
+                    val child = group.getChildAt(index)
+                    // 空态占位是首页 header 的 RelativeLayout；TaskBarContainer
+                    // 是任务栏，绝不能一起隐藏。
+                    if (child.javaClass.name == "android.widget.RelativeLayout" &&
+                        child.height > group.height / 2
+                    ) {
+                        HLog.e("$TAG 隐藏空态占位: ${child.javaClass.name} h=${child.height}")
+                        child.visibility = View.GONE
+                        child.layoutParams?.let { params ->
+                            params.height = 0
+                            child.layoutParams = params
+                        }
+                    }
+                }
+            }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
             // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
             (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
