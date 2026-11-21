@@ -4012,7 +4012,10 @@ fun Page(
             ConversationGroupStore.addGroup(context, group)
         }
         Toast.makeText(context, if (success) "聊天分组已保存" else "聊天分组保存失败", Toast.LENGTH_SHORT).show()
-        if (success) reload()
+        if (success) {
+            reload()
+            ConversationGroupRuntime.syncAsync(context)
+        }
         return success
     }
 
@@ -4106,6 +4109,7 @@ fun Page(
                     Toast.makeText(context, if (success) "分组已删除" else "分组删除失败", Toast.LENGTH_SHORT).show()
                     if (success) {
                         reload()
+                        ConversationGroupRuntime.syncAsync(context)
                         route = ConversationGroupRoute.Main
                     }
                 }

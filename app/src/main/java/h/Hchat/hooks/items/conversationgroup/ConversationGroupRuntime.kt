@@ -144,6 +144,7 @@ object ConversationGroupRuntime {
     @Volatile private var conversationSubscription: WeChatConversationChangeApi.Subscription? = null
     @Volatile private var contactSubscription: WeChatContactChangeApi.Subscription? = null
     @Volatile private var chatroomSubscription: WeChatChatroomChangeApi.Subscription? = null
+    @Volatile private var messageSubscription: h.Hchat.event.EventBus.Subscription? = null
     @Volatile private var parentUpdateMethod: Method? = null
     @Volatile private var nativeGroupRefreshMethod: Method? = null
     @Volatile private var conversationStorage: Any? = null
@@ -409,9 +410,11 @@ object ConversationGroupRuntime {
         conversationSubscription?.unsubscribe()
         contactSubscription?.unsubscribe()
         chatroomSubscription?.unsubscribe()
+        messageSubscription?.let { WeChatApis.messageEvents()?.unsubscribe(it) }
         conversationSubscription = null
         contactSubscription = null
         chatroomSubscription = null
+        messageSubscription = null
         initialized.set(false)
         syncRequested.set(false)
         effectiveConversationSnapshot = null
@@ -545,6 +548,18 @@ object ConversationGroupRuntime {
                     it.automaticGroupingEnabled ||
                         it.unreadCountMode == ConversationGroupUnreadMode.EXCLUDE_MUTED
                 }) {
+                syncAsync(context.hostContext())
+            }
+        }
+        // 会话变更事件在部分免打扰/已隐藏会话上不稳定；消息事件作为兜底，
+        // 确保新消息一定触发虚拟分组行和首页预览更新。
+        messageSubscription = WeChatApis.messageEvents()?.subscribeMessage { event ->
+            if (!runtimeActive || generation != lifecycleGeneration.get()) return@subscribeMessage
+            val talker = event?.talker?.trim().orEmpty()
+            if (talker.isBlank() || isVirtualTalker(talker)) return@subscribeMessage
+            val groups = ConversationGroupStore.load(context.hostContext())
+            if (groups.any { ConversationGroupStore.conversationOwner(groups, talker) != null ||
+                    it.automaticGroupingEnabled }) {
                 syncAsync(context.hostContext())
             }
         }
@@ -1887,7 +1902,6 @@ object ConversationGroupRuntime {
             oldSnapshot.projectedOfficialIds != nextSnapshot.projectedOfficialIds ||
             (nextSnapshot.projectedOfficialIds.isNotEmpty() &&
                 oldSnapshot.conversationIds != nextSnapshot.conversationIds)
-        val homeProjectionChanged = oldSnapshot?.hiddenHomeIds != nextSnapshot.hiddenHomeIds
         notifyVirtualGroupRows(
             database,
             activeGroups.filter {
@@ -1895,13 +1909,9 @@ object ConversationGroupRuntime {
                     (officialProjectionChanged || it.first.id in virtualRows.changedGroupIds)
             }
         )
-        if (officialProjectionChanged || homeProjectionChanged ||
-            virtualRows.changedGroupIds.isNotEmpty()
-        ) {
-            // 虚拟分组行的预览/时间/未读变化也要刷新首页缓存，
-            // 否则原生首页仍显示旧摘要。
-            ConversationGroupHomeProjection.refresh()
-        }
+        // 每次同步都让首页投影重读虚拟行。仅按 changedGroupIds 判断会漏掉
+        // 原生适配器已缓存但未标记 changed 的预览更新。
+        ConversationGroupHomeProjection.refresh()
         // Never remove a parent row while a real conversation still needs recovery.
         if (plan.unresolved.isEmpty() && parentUpdatesSucceeded.containsAll(plan.updates.keys)) {
             cleanupVirtualRows(
