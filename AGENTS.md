@@ -23,6 +23,20 @@
 - 不要提交 keystore、APK、`local.properties`、构建缓存、服务器密码、API key、Token、聊天数据库或个人媒体。
 - 提交信息和 PR 标题、说明使用中文。
 
+## Bug 排查与测试日志
+
+- 遇到 bug 先复现，再在测试版本加**可判定**的日志，不要只凭源码猜结论。
+- 日志必须能回答：入口有没有走到、关键 ID/参数是什么、走了哪个分支、最终成功还是失败。
+- 使用稳定的 `HLog.e("$TAG ...")` 前缀和唯一事件名，例如 `removeGroupNow: id=... talker=...`，方便直接 grep。
+- 关键路径至少记录“开始/命中条件/实际删除或写入结果”；失败分支要带异常和关键参数。
+- 测试包安装后优先查 LSPosed 日志：
+  ```sh
+  adb shell "su -c 'ls -1t /data/adb/lspd/log | grep modules | head -1'"
+  adb exec-out su -c "grep -a -E '关键字' /data/adb/lspd/log/<modules日志> | tail -n 100"
+  ```
+- 先根据日志确认根因，再改代码；修复后保留一条关键成功/失败日志，便于回归。
+- 正式版可以保留少量关键失败日志，详细调试日志仅用于测试版，避免长期刷屏。
+
 ## 修改完成前
 
 至少执行并汇报：
