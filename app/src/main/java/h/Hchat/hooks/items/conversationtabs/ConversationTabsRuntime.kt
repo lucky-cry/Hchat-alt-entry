@@ -328,19 +328,17 @@ internal object ConversationTabsRuntime {
         val actionBar = host.actionBar
         val list = host.list
         val stripHeight = host.strip.measuredHeight
+        (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
+            // 原生空态可能把首页内容整体塞进 paddingTop；它不在 LayoutParams
+            // 上，必须在每次布局时纠正，否则分类切换后整页只剩空白。
+            if (stripHeight > 0 && rv.paddingTop > stripHeight * 3) {
+                rv.setPadding(rv.paddingLeft, 0, rv.paddingRight, rv.paddingBottom)
+                rv.translationY = 0f
+                rv.scrollToPosition(0)
+            }
+        }
         // 分类为空时原生列表高度会被压缩/重建，此时继续叠加 topMargin 会把
         // 列表整体推到屏幕中部，留下巨大空白。空列表只恢复原生间距。
-        val itemCount = (list as? androidx.recyclerview.widget.RecyclerView)
-            ?.adapter?.itemCount ?: 0
-        if (itemCount == 0) {
-            restoreListGeometry(host)
-            host.baseTopMargin = 0
-            host.appliedTopMargin = null
-            host.strip.y = (host.titleLocation[1] + (actionBar?.height ?: 0) -
-                host.parentLocation[1]).toFloat()
-            host.strip.visibility = View.VISIBLE
-            return true
-        }
         if (!host.root.isShown || actionBar == null || !actionBar.isShown ||
             actionBar.height <= 0 || host.fixedParent.height <= 0 ||
             list?.parent !== host.root || stripHeight <= 0) {
@@ -352,11 +350,9 @@ internal object ConversationTabsRuntime {
             return true
         }
         val current = listParams.topMargin
-        if (host.appliedTopMargin != current) {
-            host.baseTopMargin = if (current <= stripHeight * 3) current else 0
-        }
-        val base = host.baseTopMargin ?: current
-        val desired = base + stripHeight
+        // 首页列表的 topMargin 直接等于标签栏高度；不要累加原生页可能留下的
+        // 旧 topMargin，否则空分类/切换分类后会把列表推出一大块空白。
+        val desired = stripHeight
         if (desired != current) {
             listParams.topMargin = desired
             host.appliedTopMargin = desired
@@ -510,6 +506,38 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+            // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
+            (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
+                rv.stopScroll()
+                (rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)?.let { lm ->
+                    // 首页是顶部对齐列表；空态/筛选后若被设成 stackFromEnd，
+                    // 少量行会全部堆在屏幕底部，上方就是大块空白。
+                    lm.stackFromEnd = false
+                    lm.reverseLayout = false
+                }
+                rv.scrollToPosition(0)
+                // 空态/下拉时原生可能留下位移动画，切换分类后仍把列表整体压在屏幕下方。
+                rv.translationY = 0f
+                // 原生空态可能写入异常大的 padding/topMargin，直接归位到标签栏高度。
+                if (rv.paddingTop > rv.height / 2) {
+                    rv.setPadding(rv.paddingLeft, 0, rv.paddingRight, rv.paddingBottom)
+                }
+                (rv.layoutParams as? RelativeLayout.LayoutParams)?.let { params ->
+                    val expected = host.strip.measuredHeight
+                    if (expected > 0 && params.topMargin != expected) {
+                        params.topMargin = expected
+                        rv.layoutParams = params
+                    }
+                }
+                // 原生 adapter 刷新是异步的，刷新后还会重新应用一次旧滚动位置。
+                main.postDelayed({
+                    rv.stopScroll()
+                    rv.scrollToPosition(0)
+                    rv.layoutManager?.let { lm ->
+                        runCatching { KavaReflector.invokeMethod(lm, "scrollToPositionWithOffset", 0, 0) }
+                    }
+                }, 350L)
+            }
         }
     }
 
