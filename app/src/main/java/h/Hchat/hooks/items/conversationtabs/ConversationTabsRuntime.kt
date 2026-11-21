@@ -497,7 +497,21 @@ internal object ConversationTabsRuntime {
         if (id == selectedId || config.tabs.none { it.id == id }) return
         selectedId = id
         publish()
-        liveHosts().forEach(::highlight)
+        liveHosts().forEach { host ->
+            highlight(host)
+            host.dirty = true
+            host.root.requestLayout()
+            main.postDelayed({
+                runCatching { updateGeometry(host) }
+                (host.list as? ViewGroup)?.let { group ->
+                    val parts = (0 until group.childCount).map { index ->
+                        val child = group.getChildAt(index)
+                        "${child.javaClass.simpleName}:${child.height}"
+                    }
+                    HLog.e("$TAG 切换后子项: ${parts.joinToString()}")
+                }
+            }, 250L)
+        }
         requestRefresh()
         main.postDelayed(::refreshHostAdapters, 120L)
         main.postDelayed({
@@ -523,6 +537,20 @@ internal object ConversationTabsRuntime {
                     val child = group.getChildAt(index)
                     // 空态占位是首页 header 的 RelativeLayout；TaskBarContainer
                     // 是任务栏，绝不能一起隐藏。
+                    if (child.javaClass.name.endsWith("TaskBarContainer") &&
+                        child.height > group.height / 2
+                    ) {
+                        // 空态下任务栏容器被撑满整屏，保留 View 但压缩高度，
+                        // 让会话行回到标签栏下方（不能 GONE，里面还有首页宿主）。
+                        HLog.e("$TAG 压缩空态任务栏: h=${child.height}")
+                        child.layoutParams?.let { params ->
+                            if (params.height != 0) {
+                                params.height = 0
+                                child.layoutParams = params
+                                child.requestLayout()
+                            }
+                        }
+                    }
                     if (child.javaClass.name == "android.widget.RelativeLayout" &&
                         child.height > group.height / 2
                     ) {
