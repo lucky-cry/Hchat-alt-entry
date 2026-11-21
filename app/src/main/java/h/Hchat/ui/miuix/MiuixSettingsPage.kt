@@ -289,6 +289,8 @@ import h.Hchat.hooks.items.grouprename.GroupRenameMonitorSettings
 import h.Hchat.hooks.items.grouprename.GroupRenameTemplateBinding
 import h.Hchat.hooks.items.hideavatar.HideChatAvatarFeature
 import h.Hchat.hooks.items.hideavatar.HideChatAvatarSettings
+import h.Hchat.hooks.items.windowsonline.HideWindowsOnlineFeature
+import h.Hchat.hooks.items.windowsonline.HideWindowsOnlineSettings
 import h.Hchat.hooks.items.hidemenu.HideChatMenuFeature
 import h.Hchat.hooks.items.hidemenu.HideChatMenuSettings
 import h.Hchat.hooks.items.hotupdate.DisableHotUpdateFeature
@@ -3206,7 +3208,8 @@ internal fun practicalFeatureGroups(
                 QuickGroupChatLabelFeature.ID,
                 QuickMomentsFeature.ID,
                 QuickTerminateFeature.ID,
-                HideChatMenuFeature.ID
+                HideChatMenuFeature.ID,
+                HideWindowsOnlineFeature.ID
             )
         ),
         FeatureGroupEntry(
@@ -3939,6 +3942,7 @@ internal fun featureSubSearchTerms(featureId: String): List<String> {
         HomeTextColorFeature.ID -> listOf("首页文字颜色", "标题颜色", "副标题颜色", "渐变文字", "微信首页", "通讯录", "发现", "我")
         ChatTimeStyleFeature.ID -> listOf("会话时间样式", "聊天时间", "微信时间", "自定义时间", "隐藏时间", "时间格式")
         HideChatAvatarFeature.ID -> listOf("隐藏头像", "隐藏自己头像", "隐藏对方头像", "聊天头像", "群聊头像", "私聊头像")
+        HideWindowsOnlineFeature.ID -> listOf("隐藏 Windows 在线", "Windows 电脑", "已登录电脑", "在线提示", "首页提示条")
         CustomBottomBarFeature.ID -> listOf(
             "自定义底栏", "底部导航", "微信首页", "修改图标", "修改标题", "隐藏标题", "隐藏底栏"
         )
@@ -4708,6 +4712,7 @@ internal fun FeatureSettingsPage(
         LegacyChatInputFeature.ID -> LegacyChatInputMiuixPage(context, provider, onBack)
         LinkParseFeature.ID -> LinkParseMiuixPage(context, provider, onBack)
         HideChatAvatarFeature.ID -> HideChatAvatarMiuixPage(context, provider, onBack)
+        HideWindowsOnlineFeature.ID -> HideWindowsOnlineMiuixPage(context, provider, onBack)
         CustomBottomBarFeature.ID -> CustomBottomBarMiuixPage(context, provider, onBack)
         FloatingBottomBarSettings.FEATURE_ID -> FloatingBottomBarMiuixPage(context, provider, onBack)
         RoundAvatarFeature.ID -> RoundAvatarMiuixPage(context, provider, onBack)

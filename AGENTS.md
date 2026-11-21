@@ -37,6 +37,10 @@
 - 先根据日志确认根因，再改代码；修复后保留一条关键成功/失败日志，便于回归。
 - 正式版可以保留少量关键失败日志，详细调试日志仅用于测试版，避免长期刷屏。
 
+## 已知未修复问题
+
+- 标签分组：未读为空时切换到其他分类，微信首页列表会被 `TaskBarContainer`/空态布局推到下半屏，出现大块空白。已尝试重置 topMargin、padding、translation、滚动和 `stackFromEnd`，并确认 `ConversationRecyclerView` 直接父类是宿主 ClassLoader 的 `WxRecyclerView`；隐藏 `TaskBarContainer` 或空态 `LinearLayout` 会破坏首页布局。后续应从标签筛选查询阶段避免进入原生空态，而不是事后改 View 树。相关提交到 `3e827c1`、`be8f93a`、`00525e7`。
+
 ## 修改完成前
 
 至少执行并汇报：

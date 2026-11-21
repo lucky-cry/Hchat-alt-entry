@@ -288,6 +288,7 @@ import h.Hchat.hooks.items.grouprename.GroupRenameMonitorSettings
 import h.Hchat.hooks.items.grouprename.GroupRenameTemplateBinding
 import h.Hchat.hooks.items.hideavatar.HideChatAvatarFeature
 import h.Hchat.hooks.items.hideavatar.HideChatAvatarSettings
+import h.Hchat.hooks.items.windowsonline.HideWindowsOnlineSettings
 import h.Hchat.hooks.items.hidemenu.HideChatMenuFeature
 import h.Hchat.hooks.items.hidemenu.HideChatMenuSettings
 import h.Hchat.hooks.items.hotupdate.DisableHotUpdateFeature
@@ -2443,6 +2444,45 @@ internal fun HideChatAvatarMiuixPage(
                         "隐藏对方的头像",
                         "在群聊和私聊中隐藏对方发送消息的头像",
                         HideChatAvatarSettings.DEFAULT_HIDE_OTHER
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun HideWindowsOnlineMiuixPage(
+    context: Context,
+    provider: FeatureSettingsProvider,
+    onBack: () -> Unit
+) {
+    val sp = remember { HchatStorage.preferences(context, HideWindowsOnlineSettings.PREFS_NAME) }
+    val listState = rememberLazyListState()
+    val scrollBehavior = MiuixScrollBehavior()
+    PageScaffold(
+        title = provider.title(),
+        largeTitle = provider.title(),
+        scrollBehavior = scrollBehavior,
+        bottomBar = { BottomActionBar("返回", onBack) }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+            state = listState,
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding() + 8.dp,
+                bottom = padding.calculateBottomPadding() + 84.dp
+            )
+        ) {
+            item { SmallTitle(text = "微信首页") }
+            item {
+                SettingsCard {
+                    SwitchRow(
+                        sp,
+                        HideWindowsOnlineSettings.KEY_ENABLE,
+                        "隐藏“已登录 Windows 电脑”",
+                        "隐藏微信首页顶部的 Windows 在线提示条",
+                        HideWindowsOnlineSettings.DEFAULT_ENABLE
                     )
                 }
             }

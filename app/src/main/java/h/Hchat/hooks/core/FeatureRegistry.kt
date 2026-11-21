@@ -29,6 +29,7 @@ import h.Hchat.hooks.items.grouplabel.GroupChatLabelFeature
 import h.Hchat.hooks.items.grouplabel.QuickGroupChatLabelFeature
 import h.Hchat.hooks.items.grouprename.GroupRenameMonitorFeature
 import h.Hchat.hooks.items.hideavatar.HideChatAvatarFeature
+import h.Hchat.hooks.items.windowsonline.HideWindowsOnlineFeature
 import h.Hchat.hooks.items.hidemenu.HideChatMenuFeature
 import h.Hchat.hooks.items.hotupdate.DisableHotUpdateFeature
 import h.Hchat.hooks.items.hometextcolor.HomeTextColorFeature
@@ -154,6 +155,7 @@ object FeatureRegistry {
             .register(MessageTextColorFeature())
             .register(HomeTextColorFeature())
             .register(HideChatAvatarFeature())
+            .register(HideWindowsOnlineFeature())
             .register(MessageBlockFeature())
             .register(FakeLocationFeature())
             .register(GameEmojiFeature())
