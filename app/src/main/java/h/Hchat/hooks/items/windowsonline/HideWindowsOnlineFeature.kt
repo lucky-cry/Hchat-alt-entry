@@ -4,6 +4,7 @@ import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookCallback
@@ -40,7 +41,10 @@ class HideWindowsOnlineFeature : BaseFeature() {
 
 private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
     private val prefs = HchatStorage.preferences(context.hostContext(), HideWindowsOnlineSettings.PREFS_NAME)
-    private val hidden = Collections.synchronizedMap(WeakHashMap<Activity, View>())
+    private data class HiddenBanner(val view: View, val parent: ViewGroup, val index: Int)
+
+    private val hidden = Collections.synchronizedMap(WeakHashMap<Activity, HiddenBanner>())
+    private val watched = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
     @Volatile private var installed = false
 
     @Synchronized
@@ -56,11 +60,18 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
                 override fun after(param: HookParam) {
                     val activity = param.thisObject as? Activity ?: return
                     activity.window?.decorView?.postDelayed({
+                        watch(activity)
                         apply(activity)
                     }, 300L)
                 }
             })
             installed = true
+            (WeChatApis.currentActivity()?.currentActivity() as? Activity)?.let { activity ->
+                activity.window?.decorView?.postDelayed({
+                    watch(activity)
+                    apply(activity)
+                }, 500L)
+            }
             HLog.e("$TAG 隐藏 Windows 在线安装完成")
             true
         }.getOrElse {
@@ -69,27 +80,60 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
         }
     }
 
+    private fun watch(activity: Activity) {
+        val decor = activity.window?.decorView ?: return
+        if (!watched.add(decor)) return
+        decor.viewTreeObserver.addOnGlobalLayoutListener {
+            if (prefs.getBoolean(
+                    HideWindowsOnlineSettings.KEY_ENABLE,
+                    HideWindowsOnlineSettings.DEFAULT_ENABLE
+                )
+            ) {
+                apply(activity)
+            }
+        }
+    }
+
     private fun apply(activity: Activity) {
         val decor = activity.window?.decorView ?: return
-        if (!prefs.getBoolean(HideWindowsOnlineSettings.KEY_ENABLE, HideWindowsOnlineSettings.DEFAULT_ENABLE)) {
-            hidden.remove(activity)?.let { it.visibility = View.VISIBLE }
+        val enabled = prefs.getBoolean(
+            HideWindowsOnlineSettings.KEY_ENABLE,
+            HideWindowsOnlineSettings.DEFAULT_ENABLE
+        )
+        if (!enabled) {
+            HLog.e("$TAG 开关未启用")
+            hidden.remove(activity)?.let { banner ->
+                banner.view.visibility = View.VISIBLE
+                if (banner.view.parent == null && banner.index <= banner.parent.childCount) {
+                    banner.parent.addView(banner.view, banner.index)
+                }
+            }
             return
         }
-        val target = findBanner(decor) ?: return
+        val target = findBanner(decor)
+        HLog.e("$TAG 开关已启用, 提示条=${target?.javaClass?.name}")
+        if (target == null) return
+        val parent = target.parent as? ViewGroup ?: return
+        val index = parent.indexOfChild(target)
         target.visibility = View.GONE
-        hidden[activity] = target
+        parent.removeView(target)
+        hidden[activity] = HiddenBanner(target, parent, index)
     }
 
     private fun findBanner(view: View): View? {
+        if (view is TextView && view.text?.contains("Windows") == true) {
+            HLog.e("$TAG 候选文本: ${view.text}")
+        }
         if (view is TextView && view.text?.contains("Windows") == true &&
             view.text?.contains("电脑") == true
         ) {
             var candidate: View = view
-            repeat(2) {
-                val parent = candidate.parent as? View ?: return@repeat
+            var parent = candidate.parent
+            while (parent is ViewGroup && !parent.javaClass.name.contains("RecyclerView")) {
                 candidate = parent
+                parent = parent.parent
             }
-            return candidate.takeIf { it !is ViewGroup || it.parent != null }
+            return candidate.takeIf { it.parent is ViewGroup }
         }
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {
