@@ -2241,12 +2241,10 @@ object ConversationGroupRuntime {
         }
         (existing - desiredTalkers).forEach { talker ->
             automaticAvatarSources.remove(talker)
-            val deleted = runCatching {
-                WeChatApis.conversations()?.deleteConversation(talker) == true
-            }.getOrDefault(false)
-            if (!deleted) {
-                database.delete("rconversation", "username=?", arrayOf(talker))
-            }
+            // deleteConversation 对虚拟会话可能返回 true 但并未真正删掉
+            // rconversation，导致首页分组行继续残留；这里必须直接兜底删除。
+            runCatching { WeChatApis.conversations()?.deleteConversation(talker) }
+            database.delete("rconversation", "username=?", arrayOf(talker))
             database.delete("rcontact", "username=?", arrayOf(talker))
             database.delete("img_flag", "username=?", arrayOf(talker))
         }

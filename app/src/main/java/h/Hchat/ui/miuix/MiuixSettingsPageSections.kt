@@ -4006,7 +4006,10 @@ fun Page(
             Toast.makeText(context, "同一层级已存在同名分组", Toast.LENGTH_SHORT).show()
             return false
         }
-        val success = if (existing) {
+        val success = if (existing && group.conversationIds.isEmpty() && !group.showEmpty) {
+            // 已有分组被清空会话后视为“解除分组”，不再保留空壳。
+            ConversationGroupStore.deleteGroup(context, group.id)
+        } else if (existing) {
             ConversationGroupStore.updateGroup(context, group)
         } else {
             ConversationGroupStore.addGroup(context, group)
