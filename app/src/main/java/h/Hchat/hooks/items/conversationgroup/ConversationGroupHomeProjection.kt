@@ -40,6 +40,7 @@ internal object ConversationGroupHomeProjection {
     @Volatile private var hiddenIds: () -> Set<String> = { emptySet() }
     @Volatile private var legacyStorage: WeakReference<Any>? = null
     @Volatile private var tabFilter: () -> ConversationTabFilter? = { null }
+    @Volatile private var updateMethods: List<Method> = emptyList()
     private data class QueryScope(val installation: Installation, val filter: ConversationTabFilter?, var rootApplied: Boolean = false)
     private val queryScopes = ThreadLocal<ArrayDeque<QueryScope>>()
     private val tabRefreshPending = AtomicBoolean(false)
@@ -177,6 +178,8 @@ internal object ConversationGroupHomeProjection {
         val legacy = methods.filter { it.returnType.isArray }
         val modern = methods.filter { it.parameterTypes.size == 1 && !it.returnType.isPrimitive }
         val updates = methods.filter(::isModernUpdate)
+        updateMethods = updates
+        HLog.e("$TAG 投影安装路径: legacy=${legacy.size} modern=${modern.size} updates=${updates.size}")
         legacy.forEach { changes ->
             val notice = methods.single { it.declaringClass == changes.declaringClass && it.returnType == Void.TYPE }
             // Preserve the specialized native cursor type; only extend its WHERE expression in this scope.
@@ -278,6 +281,10 @@ internal object ConversationGroupHomeProjection {
                 override fun after(param: HookParam) {
                     if (!isActive(installation)) return
                     if (param.result != true) return
+                    // 首次进入首页时 page 查询可能早于标签查询安装，导致 refreshers
+                    // 为空；行可见性回调也持有同一个 page，可直接补抓刷新器。
+                    updates.firstOrNull { it.declaringClass.isInstance(param.thisObject) }
+                        ?.let { captureRefresh(installation, param.thisObject ?: return, Refresh(it)) }
                     val filter = tabFilter()
                     if (filter?.active == true) {
                         val row = param.args.firstOrNull()
@@ -350,6 +357,75 @@ internal object ConversationGroupHomeProjection {
     fun refresh() {
         val installation = runCatching { installation() }.getOrNull() ?: return
         refresh(installation)
+    }
+
+    /** 直接让原生首页适配器重算可见行，绕开尚未捕获 refreshers 的首屏场景。 */
+    fun refreshFromAdapter(adapter: Any?): Boolean {
+        adapter ?: return false
+        val installation = runCatching { installation() }.getOrNull() ?: return false
+        var invoked = false
+        val owners = findRefreshOwners(adapter)
+        HLog.e("$TAG 适配器刷新: adapter=${adapter.javaClass.name} " +
+            "updates=${updateMethods.size} owners=${owners.size}")
+        updateMethods.forEach { method ->
+            owners.filter { method.declaringClass.isInstance(it) }.forEach { owner ->
+                runCatching {
+                    val types = method.parameterTypes
+                    if (types.size == 2 && types[0] == Integer.TYPE && types[1] == String::class.java) {
+                        KavaReflector.invokeOrThrow(method, owner, 5, "")
+                        invoked = true
+                    } else if (types.size == 3 && types[1] == Integer.TYPE &&
+                        types[2] == String::class.java
+                    ) {
+                        val list = findFieldValue(owner, types[0])
+                        if (list != null) {
+                            KavaReflector.invokeOrThrow(method, owner, list, 5, "")
+                            invoked = true
+                        }
+                    }
+                }.onFailure { HLog.e("$TAG 适配器刷新失败: ${it.message}", it) }
+            }
+        }
+        runCatching { KavaReflector.invokeMethod(adapter, "notifyDataSetChanged") }
+        return invoked
+    }
+
+    private fun findFieldValue(owner: Any, type: Class<*>): Any? {
+        var current: Class<*>? = owner.javaClass
+        while (current != null && current != Any::class.java) {
+            for (field in KavaReflector.declaredFields(current)) {
+                if (KavaReflector.isStatic(field) || !type.isAssignableFrom(field.type)) continue
+                return runCatching { KavaReflector.readField(field, owner) }.getOrNull()
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun findRefreshOwners(root: Any): List<Any> {
+        val result = ArrayList<Any>()
+        val queue = ArrayDeque<Pair<Any, Int>>()
+        queue.add(root to 0)
+        val visited = HashSet<Int>()
+        while (queue.isNotEmpty()) {
+            val (value, depth) = queue.removeFirst()
+            if (!visited.add(System.identityHashCode(value))) continue
+            if (updateMethods.any { it.declaringClass.isInstance(value) }) result.add(value)
+            if (depth >= 2) continue
+            var current: Class<*>? = value.javaClass
+            while (current != null && current != Any::class.java) {
+                for (field in KavaReflector.declaredFields(current)) {
+                    if (KavaReflector.isStatic(field) || field.type.isPrimitive ||
+                        field.type == String::class.java
+                    ) continue
+                    val child = runCatching { KavaReflector.readField(field, value) }.getOrNull() ?: continue
+                    if (child is android.view.View || child is android.content.Context) continue
+                    queue.add(child to depth + 1)
+                }
+                current = current.superclass
+            }
+        }
+        return result
     }
 
     private fun refresh(installation: Installation): Unit = synchronized(lifecycleLock) {

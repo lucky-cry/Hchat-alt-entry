@@ -393,6 +393,8 @@ internal object ConversationTabsRuntime {
             runCatching {
                 val nextAccount = ConversationTabsStore.accountKey()
                 val next = ConversationTabsStore.load(owner.hostContext())
+                HLog.e("$TAG 配置加载: enabled=${next.enabled} tabs=${next.tabs.size} " +
+                    "account=${nextAccount.take(8)} ready=$ready")
                 if (ticket != revision.get()) return@runCatching
                 val filters = if (next.enabled) next.tabs.associate { it.id to ConversationTabFilter(it) } else emptyMap()
                 val images = if (!next.enabled) emptyMap() else buildMap {
@@ -422,14 +424,22 @@ internal object ConversationTabsRuntime {
                             compiledFilters = filters
                             if (config.tabs.none { it.id == selectedId }) selectedId = config.tabs.first { it.kind == ConversationTabKind.ALL }.id
                             if (config.enabled && !ready) {
+                                HLog.e("$TAG 请求安装标签查询")
                                 DexInstallScheduler.schedule(ConversationTabsFeature.ID, "标签分组", DexInstallScheduler.Stage.BRIDGE) {
                                     if (context !== owner || lifecycle.get() != generation) return@schedule false
-                                    val success = ConversationGroupHomeProjection.installTabs(owner)
+                                    HLog.e("$TAG 安装标签查询开始")
+                                    val success = runCatching {
+                                        ConversationGroupHomeProjection.installTabs(owner)
+                                    }.onFailure {
+                                        HLog.e("$TAG 安装标签查询异常: ${it.message}", it)
+                                    }.getOrDefault(false)
+                                    HLog.e("$TAG 安装标签查询结果=$success")
                                     if (success) main.post {
                                         synchronized(reloadLock) {
                                             if (context === owner && lifecycle.get() == generation) {
                                                 ready = true
                                                 publish(); liveHosts().forEach(::render); requestRefresh()
+                                                main.postDelayed(::refreshHostAdapters, 150L)
                                             }
                                         }
                                     }
@@ -453,6 +463,8 @@ internal object ConversationTabsRuntime {
     private fun publish() {
         filter = if (!ready || !config.enabled || account.isBlank() || liveHosts().isEmpty()) null else
             compiledFilters[selectedId]
+        HLog.e("$TAG publish: selected=$selectedId ready=$ready enabled=${config.enabled} " +
+            "hosts=${liveHosts().size} filter=${filter != null}")
     }
 
     private fun clearChangedAccount() {
@@ -475,11 +487,24 @@ internal object ConversationTabsRuntime {
         publish()
         liveHosts().forEach(::highlight)
         requestRefresh()
+        main.postDelayed(::refreshHostAdapters, 120L)
     }
 
-    private fun requestRefresh() {
+    private fun refreshHostAdapters() {
+        liveHosts().forEach { host ->
+            val list = host.list ?: findConversationList(host.root)
+            val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
+            ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+        }
+    }
+
+    private fun requestRefresh(retries: Int = 0) {
         main.removeCallbacks(refresh)
-        main.postDelayed(refresh, 80L)
+        main.postDelayed({
+            refresh.run()
+            // 首页首次查询早于标签投影安装时，刷新器要等一次原生 page 更新才就绪。
+            if (retries < 5) requestRefresh(retries + 1)
+        }, if (retries == 0) 80L else 350L)
     }
 
     private fun render(host: Host) {
