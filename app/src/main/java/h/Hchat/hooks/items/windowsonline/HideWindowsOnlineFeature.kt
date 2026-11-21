@@ -41,9 +41,7 @@ class HideWindowsOnlineFeature : BaseFeature() {
 
 private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
     private val prefs = HchatStorage.preferences(context.hostContext(), HideWindowsOnlineSettings.PREFS_NAME)
-    private data class HiddenBanner(val view: View, val parent: ViewGroup, val index: Int)
-
-    private val hidden = Collections.synchronizedMap(WeakHashMap<Activity, HiddenBanner>())
+    private val hidden = Collections.synchronizedMap(WeakHashMap<Activity, View>())
     private val watched = Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<View, Boolean>()))
     @Volatile private var installed = false
 
@@ -118,22 +116,23 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
         )
         if (!enabled) {
             HLog.e("$TAG 开关未启用")
-            hidden.remove(activity)?.let { banner ->
-                banner.view.visibility = View.VISIBLE
-                if (banner.view.parent == null && banner.index <= banner.parent.childCount) {
-                    banner.parent.addView(banner.view, banner.index)
-                }
-            }
+            hidden.remove(activity)?.let { it.visibility = View.VISIBLE }
             return
         }
         val target = findBanner(decor)
         HLog.e("$TAG 开关已启用, 提示条=${target?.javaClass?.name}")
         if (target == null) return
-        val parent = target.parent as? ViewGroup ?: return
-        val index = parent.indexOfChild(target)
+        // 只隐藏整行并折叠高度，不能 removeView：从聊天页返回后
+        // RecyclerView 会因 item 被移除而留下空白。
         target.visibility = View.GONE
-        parent.removeView(target)
-        hidden[activity] = HiddenBanner(target, parent, index)
+        target.layoutParams?.let { params ->
+            if (params.height != 0) {
+                params.height = 0
+                target.layoutParams = params
+            }
+        }
+        target.requestLayout()
+        hidden[activity] = target
     }
 
     private fun findBanner(view: View): View? {
