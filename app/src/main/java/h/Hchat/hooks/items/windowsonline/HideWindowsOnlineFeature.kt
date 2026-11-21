@@ -92,6 +92,22 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
                 apply(activity)
             }
         }
+        // 提示条可能晚于 onResume 才插入，轮询几秒保证不用手动点一下。
+        var attempts = 0
+        val poll = object : Runnable {
+            override fun run() {
+                if (!prefs.getBoolean(
+                        HideWindowsOnlineSettings.KEY_ENABLE,
+                        HideWindowsOnlineSettings.DEFAULT_ENABLE
+                    )
+                ) return
+                apply(activity)
+                if (attempts++ < 20 && activity.window?.decorView === decor) {
+                    decor.postDelayed(this, 300L)
+                }
+            }
+        }
+        decor.postDelayed(poll, 100L)
     }
 
     private fun apply(activity: Activity) {
