@@ -500,6 +500,18 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach(::highlight)
         requestRefresh()
         main.postDelayed(::refreshHostAdapters, 120L)
+        main.postDelayed({
+            if (selectedId != id) return@postDelayed
+            val host = liveHosts().firstOrNull() ?: return@postDelayed
+            val list = host.list ?: findConversationList(host.root) ?: return@postDelayed
+            val adapter = list.let { KavaReflector.invokeMethod(it, "getAdapter") }
+            val count = KavaReflector.invokeMethod(adapter, "getItemCount") as? Int ?: 0
+            // 首页 adapter 可能还有一个占位 header，因此空分类通常是 1 而不是 0。
+            if (count <= 1) {
+                val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL } ?: return@postDelayed
+                if (all.id != selectedId) select(all.id)
+            }
+        }, 500L)
     }
 
     private fun refreshHostAdapters() {
@@ -548,7 +560,19 @@ internal object ConversationTabsRuntime {
         for (index in 0 until rv.childCount) {
             val child = rv.getChildAt(index) ?: continue
             val blank = child.height > rv.height / 2
-            child.visibility = if (blank) View.GONE else View.VISIBLE
+            if (blank) {
+                HLog.e("$TAG 隐藏空态占位: ${child.javaClass.name} h=${child.height} " +
+                    "w=${child.width}")
+                child.visibility = View.GONE
+                child.layoutParams?.let { params ->
+                    if (params.height != 0) {
+                        params.height = 0
+                        child.layoutParams = params
+                    }
+                }
+            } else {
+                child.visibility = View.VISIBLE
+            }
         }
     }
 
