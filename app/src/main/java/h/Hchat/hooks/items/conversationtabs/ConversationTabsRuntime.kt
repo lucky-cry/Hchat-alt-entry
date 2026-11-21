@@ -328,6 +328,19 @@ internal object ConversationTabsRuntime {
         val actionBar = host.actionBar
         val list = host.list
         val stripHeight = host.strip.measuredHeight
+        // 分类为空时原生列表高度会被压缩/重建，此时继续叠加 topMargin 会把
+        // 列表整体推到屏幕中部，留下巨大空白。空列表只恢复原生间距。
+        val itemCount = (list as? androidx.recyclerview.widget.RecyclerView)
+            ?.adapter?.itemCount ?: 0
+        if (itemCount == 0) {
+            restoreListGeometry(host)
+            host.baseTopMargin = 0
+            host.appliedTopMargin = null
+            host.strip.y = (host.titleLocation[1] + (actionBar?.height ?: 0) -
+                host.parentLocation[1]).toFloat()
+            host.strip.visibility = View.VISIBLE
+            return true
+        }
         if (!host.root.isShown || actionBar == null || !actionBar.isShown ||
             actionBar.height <= 0 || host.fixedParent.height <= 0 ||
             list?.parent !== host.root || stripHeight <= 0) {
@@ -339,7 +352,9 @@ internal object ConversationTabsRuntime {
             return true
         }
         val current = listParams.topMargin
-        if (host.appliedTopMargin != current) host.baseTopMargin = current
+        if (host.appliedTopMargin != current) {
+            host.baseTopMargin = if (current <= stripHeight * 3) current else 0
+        }
         val base = host.baseTopMargin ?: current
         val desired = base + stripHeight
         if (desired != current) {
