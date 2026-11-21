@@ -4006,7 +4006,8 @@ fun Page(
             Toast.makeText(context, "同一层级已存在同名分组", Toast.LENGTH_SHORT).show()
             return false
         }
-        val success = if (existing && group.conversationIds.isEmpty() && !group.showEmpty) {
+        val removing = existing && group.conversationIds.isEmpty() && !group.showEmpty
+        val success = if (removing) {
             // 已有分组被清空会话后视为“解除分组”，不再保留空壳。
             ConversationGroupStore.deleteGroup(context, group.id)
         } else if (existing) {
@@ -4016,6 +4017,7 @@ fun Page(
         }
         Toast.makeText(context, if (success) "聊天分组已保存" else "聊天分组保存失败", Toast.LENGTH_SHORT).show()
         if (success) {
+            if (removing) ConversationGroupRuntime.removeGroupNow(context, group.id)
             reload()
             ConversationGroupRuntime.syncAsync(context)
         }
@@ -4111,6 +4113,7 @@ fun Page(
                     val success = ConversationGroupStore.deleteGroup(context, currentRoute.group.id)
                     Toast.makeText(context, if (success) "分组已删除" else "分组删除失败", Toast.LENGTH_SHORT).show()
                     if (success) {
+                        ConversationGroupRuntime.removeGroupNow(context, currentRoute.group.id)
                         reload()
                         ConversationGroupRuntime.syncAsync(context)
                         route = ConversationGroupRoute.Main

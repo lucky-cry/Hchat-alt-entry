@@ -368,6 +368,22 @@ object ConversationGroupRuntime {
     }
 
     @JvmStatic
+    /** 删除分组配置后立即清掉对应虚拟行，避免首页残留可点击的空壳。 */
+    fun removeGroupNow(context: Context, groupId: String) {
+        val talker = virtualTalker(groupId)
+        val database = WeChatApis.database()
+        if (database != null) {
+            runCatching { WeChatApis.conversations()?.deleteConversation(talker) }
+            runCatching {
+                database.delete("rconversation", "username=?", arrayOf(talker))
+                database.delete("rcontact", "username=?", arrayOf(talker))
+                database.delete("img_flag", "username=?", arrayOf(talker))
+            }.onFailure { HLog.e("$TAG 删除分组虚拟行失败: ${it.message}", it) }
+            ConversationGroupHomeProjection.refresh()
+        }
+        syncAsync(context)
+    }
+
     fun syncAsync(context: Context) {
         val appContext = context.applicationContext
         val generation = synchronized(lifecycleLock) {
