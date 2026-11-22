@@ -548,6 +548,38 @@ internal object ConversationTabsRuntime {
         }.onFailure { HLog.e("$TAG AnchorMutate hook 安装失败", it) }
 
         runCatching {
+            val orientationHelper = run {
+                var current: Class<*>? = manager.javaClass
+                while (current != null && current != Any::class.java) {
+                    val field = KavaReflector.declaredFields(current).firstOrNull {
+                        !KavaReflector.isStatic(it) && it.type.simpleName == "w1"
+                    }
+                    if (field != null) {
+                        return@run runCatching { KavaReflector.readField(field, manager) }.getOrNull()
+                    }
+                    current = current.superclass
+                }
+                null
+            }
+            orientationHelper?.javaClass?.let { helperClass ->
+                KavaReflector.declaredMethods(helperClass).forEach { method ->
+                    if (method.parameterCount == 0 && method.returnType == Integer.TYPE &&
+                        method.name in setOf("f", "g", "h", "i", "j", "k", "l")
+                    ) {
+                        HookRegistry.get().hook(method, object : HookCallback {
+                            override fun after(param: HookParam) {
+                                if (!inLayoutDiagWindow()) return
+                                HLog.e("$TAG OrientationHelper ${method.name} AFTER tab=$selectedId " +
+                                    "result=${param.result}")
+                            }
+                        })
+                        HLog.e("$TAG LMLayout hook OrientationHelper ${method.name}")
+                    }
+                }
+            }
+        }.onFailure { HLog.e("$TAG OrientationHelper hook 安装失败", it) }
+
+        runCatching {
             var current: Class<*>? = manager.javaClass
             while (current != null && current != Any::class.java) {
                 KavaReflector.declaredMethods(current).forEach { method ->
