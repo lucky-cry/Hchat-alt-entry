@@ -516,6 +516,15 @@ internal object ConversationTabsRuntime {
         main.postDelayed(::refreshHostAdapters, 120L)
         main.postDelayed({
             if (selectedId != id) return@postDelayed
+            // 停留在未读标签时，如果未读被全部读完，也要立刻退回“全部”，
+            // 避免原生列表变成空态。
+            val selectedTab = config.tabs.firstOrNull { it.id == selectedId }
+            if (selectedTab?.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
+                HLog.e("$TAG 未读已被读完, 退回全部")
+                val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL } ?: return@postDelayed
+                if (all.id != selectedId) select(all.id)
+                return@postDelayed
+            }
             val host = liveHosts().firstOrNull() ?: return@postDelayed
             val list = host.list ?: findConversationList(host.root) ?: return@postDelayed
             val adapter = list.let { KavaReflector.invokeMethod(it, "getAdapter") }
@@ -533,6 +542,19 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+            // ConversationRecyclerView 不是模块可识别的 RecyclerView，但它有原生
+            // 滚动 API；空分类后用它归零滚动，等价于手动滑一下让列表重排。
+            list?.let { recycler ->
+                runCatching {
+                    KavaReflector.invokeMethod(recycler, "setSelectionWithOffset", 0)
+                    KavaReflector.invokeMethod(recycler, "smoothScrollToPositionFromTop", 0, 0, 0)
+                    HLog.e("$TAG 原生列表滚动归零: offset=${
+                        KavaReflector.invokeMethod(recycler, "getScrollOffset")
+                    }")
+                }.onFailure {
+                    HLog.e("$TAG 原生列表滚动归零失败: ${it.message}", it)
+                }
+            }
             // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
             (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
                 rv.stopScroll()
@@ -601,13 +623,10 @@ internal object ConversationTabsRuntime {
     }
 
     private fun unreadCount(): Int {
+        // 之前用 storage().queryString 在部分账号返回 0，导致未读为空仍切进原生空态。
+        // 改用会话 API 的 getTotalUnreadCount，它和首页红点同源。
         return runCatching {
-            WeChatApis.storage()?.queryString(
-                "SELECT COUNT(*) AS c FROM rconversation " +
-                    "WHERE unReadCount > 0 OR unReadMuteCount > 0",
-                null,
-                "c"
-            )?.toIntOrNull() ?: -1
+            WeChatApis.conversations()?.getTotalUnreadCount() ?: -1
         }.getOrDefault(-1)
     }
 
