@@ -174,6 +174,18 @@ object ConversationGroupRuntime {
     private fun installInternal(context: FeatureContext): Boolean {
         HLog.e("$TAG installInternal 开始")
         val query = locateQueryMethod(context) ?: return installAbort("main_query")
+        runCatching {
+            HookRegistry.get().hook(query, object : HookCallback {
+                override fun after(param: HookParam) {
+                    val storage = param.thisObject ?: return
+                    if (conversationStorage !== storage) {
+                        conversationStorage = storage
+                        HLog.e("$TAG 捕获 ConversationStorage: ${storage.javaClass.name}")
+                    }
+                }
+            })
+        }
+        captureConversationStorageByConstructor(context)
         HLog.e("$TAG 定位 share_reset")
         val shareRecentAdapterReset = locateShareRecentAdapterResetMethod(context) ?: return installAbort("share_reset")
         HLog.e("$TAG 定位 share_forward")
@@ -2341,6 +2353,24 @@ object ConversationGroupRuntime {
         }.onFailure {
             HLog.e("$TAG 调用微信原生会话归拢失败: count=${talkers.size} ${it.message}", it)
         }.getOrDefault(false)
+    }
+
+    private fun captureConversationStorageByConstructor(context: FeatureContext) {
+        val clazz = KavaReflector.loadClass(
+            "com.tencent.mm.storage.m4",
+            context.hostClassLoader()
+        ) ?: return
+        KavaReflector.declaredConstructors(clazz).forEach { constructor ->
+            runCatching {
+                HookRegistry.get().hook(constructor, object : HookCallback {
+                    override fun after(param: HookParam) {
+                        val storage = param.thisObject ?: return
+                        conversationStorage = storage
+                        HLog.e("$TAG 构造捕获 ConversationStorage: ${storage.javaClass.name}")
+                    }
+                })
+            }
+        }
     }
 
     private fun captureConversationStorage(candidate: Any?, method: Method, context: Context, generation: Long) {
