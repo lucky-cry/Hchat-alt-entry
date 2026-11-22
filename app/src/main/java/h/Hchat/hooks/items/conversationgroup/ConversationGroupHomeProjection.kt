@@ -352,6 +352,7 @@ internal object ConversationGroupHomeProjection {
     }
 
     private val refreshPending = AtomicBoolean(false)
+    private val refreshAgain = AtomicBoolean(false)
     private var refreshTask: Runnable? = null
 
     fun refresh() {
@@ -429,17 +430,20 @@ internal object ConversationGroupHomeProjection {
     }
 
     private fun refresh(installation: Installation): Unit = synchronized(lifecycleLock) {
-        if (!isActive(installation) || !refreshPending.compareAndSet(false, true)) return
+        if (!isActive(installation)) return
+        if (!refreshPending.compareAndSet(false, true)) {
+            refreshAgain.set(true)
+            return
+        }
         val task = object : Runnable {
             override fun run() {
                 val current = synchronized(lifecycleLock) {
                     if (refreshTask !== this || !isActive(installation)) return
                     refreshTask = null
-                    refreshPending.set(false)
                     synchronized(refreshers) { refreshers.entries.map { it.key to it.value } }
                 }
                 current.forEach { (owner, refresh) ->
-                    if (!isActive(installation)) return
+                    if (!isActive(installation)) return@forEach
                     runCatching {
                         val types = refresh.method.parameterTypes
                         when {
@@ -453,6 +457,16 @@ internal object ConversationGroupHomeProjection {
                         }
                     }.onFailure { HLog.e("$TAG 刷新首页投影失败", it) }
                 }
+                val rerun = synchronized(lifecycleLock) {
+                    if (!isActive(installation)) {
+                        refreshPending.set(false)
+                        false
+                    } else {
+                        refreshPending.set(false)
+                        refreshAgain.getAndSet(false)
+                    }
+                }
+                if (rerun) refresh(installation)
             }
         }
         refreshTask = task

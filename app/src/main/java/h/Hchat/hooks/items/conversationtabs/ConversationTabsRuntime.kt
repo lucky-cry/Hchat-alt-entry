@@ -69,6 +69,9 @@ internal object ConversationTabsRuntime {
     @Volatile private var filter: ConversationTabFilter? = null
     @Volatile private var ready = false
     private val refresh = Runnable { ConversationGroupHomeProjection.refresh() }
+    private var refreshChainTask: Runnable? = null
+    private var hostAdapterRefreshTask: Runnable? = null
+    private var refreshGeneration = 0L
     private val taskBarLayoutListeners = WeakHashMap<View, View.OnLayoutChangeListener>()
     private val recyclerScrollListeners =
         WeakHashMap<View, ViewTreeObserver.OnScrollChangedListener>()
@@ -448,7 +451,7 @@ internal object ConversationTabsRuntime {
                                             if (context === owner && lifecycle.get() == generation) {
                                                 ready = true
                                                 publish(); liveHosts().forEach(::render); requestRefresh()
-                                                main.postDelayed(::refreshHostAdapters, 150L)
+                                                scheduleHostAdapterRefresh()
                                             }
                                         }
                                     }
@@ -505,7 +508,7 @@ internal object ConversationTabsRuntime {
         publish()
         liveHosts().forEach(::highlight)
         requestRefresh()
-        main.postDelayed(::refreshHostAdapters, 120L)
+        scheduleHostAdapterRefresh()
     }
 
     private val originalItemAnimators = WeakHashMap<View, Any?>()
@@ -1067,13 +1070,33 @@ internal object ConversationTabsRuntime {
         }.onFailure { HLog.e("$TAG LayoutDiag stage=$stage 失败", it) }
     }
 
-    private fun requestRefresh(retries: Int = 0) {
-        main.removeCallbacks(refresh)
-        main.postDelayed({
+    private fun requestRefresh() {
+        refreshChainTask?.let(main::removeCallbacks)
+        refreshChainTask = null
+        val generation = ++refreshGeneration
+        scheduleRefresh(generation, 0)
+    }
+
+    private fun scheduleRefresh(generation: Long, retries: Int) {
+        if (generation != refreshGeneration) return
+        val task = Runnable {
+            refreshChainTask = null
+            if (generation != refreshGeneration) return@Runnable
             refresh.run()
-            // 首页首次查询早于标签投影安装时，刷新器要等一次原生 page 更新才就绪。
-            if (retries < 5) requestRefresh(retries + 1)
-        }, if (retries == 0) 80L else 350L)
+            if (retries < 5) scheduleRefresh(generation, retries + 1)
+        }
+        refreshChainTask = task
+        main.postDelayed(task, if (retries == 0) 80L else 350L)
+    }
+
+    private fun scheduleHostAdapterRefresh() {
+        hostAdapterRefreshTask?.let(main::removeCallbacks)
+        val task = Runnable {
+            hostAdapterRefreshTask = null
+            refreshHostAdapters()
+        }
+        hostAdapterRefreshTask = task
+        main.postDelayed(task, 120L)
     }
 
     private fun render(host: Host) {
