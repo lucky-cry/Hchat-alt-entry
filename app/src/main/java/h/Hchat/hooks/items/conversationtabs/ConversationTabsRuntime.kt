@@ -519,6 +519,35 @@ internal object ConversationTabsRuntime {
         if (layoutDiagHooksInstalled) return
         layoutDiagHooksInstalled = true
         runCatching {
+            val anchorClass = KavaReflector.loadClass(
+                "androidx.recyclerview.widget.k1",
+                manager.javaClass.classLoader
+            )
+            anchorClass?.let { clazz ->
+                KavaReflector.declaredMethods(clazz).forEach { method ->
+                    if (method.returnType != Void.TYPE || method.name !in setOf("a", "b", "c", "d")) {
+                        return@forEach
+                    }
+                    HookRegistry.get().hook(method, object : HookCallback {
+                        override fun before(param: HookParam) {
+                            if (!inLayoutDiagWindow()) return
+                            HLog.e("$TAG AnchorMutate ${method.name} BEFORE tab=$selectedId " +
+                                "anchor=${dumpObject(param.thisObject)} " +
+                                "args=${param.args.joinToString(",")} caller=${callerStack()}")
+                        }
+
+                        override fun after(param: HookParam) {
+                            if (!inLayoutDiagWindow()) return
+                            HLog.e("$TAG AnchorMutate ${method.name} AFTER tab=$selectedId " +
+                                "anchor=${dumpObject(param.thisObject)}")
+                        }
+                    })
+                    HLog.e("$TAG LMLayout hook AnchorMutate ${method.name}")
+                }
+            }
+        }.onFailure { HLog.e("$TAG AnchorMutate hook 安装失败", it) }
+
+        runCatching {
             var current: Class<*>? = manager.javaClass
             while (current != null && current != Any::class.java) {
                 KavaReflector.declaredMethods(current).forEach { method ->
