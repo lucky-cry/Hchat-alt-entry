@@ -74,6 +74,7 @@ import h.Hchat.hooks.items.quickcontactedit.QuickContactEditFeature
 import h.Hchat.hooks.items.quickmoments.QuickMomentsFeature
 import h.Hchat.hooks.items.quickread.QuickMarkReadFeature
 import h.Hchat.hooks.items.quickterminate.QuickTerminateFeature
+import h.Hchat.hooks.items.cancelmodule.CancelModuleFeature
 import h.Hchat.hooks.items.realtail.RealNameTailFeature
 import h.Hchat.hooks.items.roundavatar.RoundAvatarFeature
 
@@ -124,6 +125,7 @@ object FeatureRegistry {
             .register(QuickMomentsFeature())
             .register(QuickMarkReadFeature())
             .register(QuickTerminateFeature())
+            .register(CancelModuleFeature())
             .register(AutoReplyFeature())
             .register(AutoMessageForwardFeature())
             .register(ConversationGroupFeature())

@@ -473,7 +473,7 @@ import h.Hchat.hooks.items.selectedmessages.SelectedMessagesFeature
 import h.Hchat.hooks.items.selectedmessages.SelectedMessagesRuntimeCoordinator
 import h.Hchat.hooks.items.selectedmessages.SelectedMessagesSettings
 import h.Hchat.hooks.items.settings.PluginAgentEntryProvider
-import h.Hchat.hooks.items.settings.CancelModuleEntryProvider
+import h.Hchat.hooks.items.cancelmodule.CancelModuleFeature
 import h.Hchat.hooks.items.settings.SettingsEntrySettings
 import h.Hchat.hooks.items.settings.SettingsFeature
 import h.Hchat.hooks.items.shortvideo.FinderMediaDownloadFeature
@@ -3201,7 +3201,6 @@ internal fun practicalFeatureGroups(
             title = "界面",
             providers = practicalProviders.filterByIds(
                 SettingsFeature.ID,
-                CancelModuleEntryProvider.ID,
                 PluginAgentEntryProvider.ID,
                 FloatingShortcutFeature.ID,
                 ProfileIdFeature.ID,
@@ -3210,6 +3209,7 @@ internal fun practicalFeatureGroups(
                 QuickGroupChatLabelFeature.ID,
                 QuickMomentsFeature.ID,
                 QuickTerminateFeature.ID,
+                CancelModuleFeature.ID,
                 HideChatMenuFeature.ID,
                 HideWindowsOnlineFeature.ID
             )
@@ -4652,7 +4652,7 @@ internal fun FeatureSettingsPage(
         RemoveForwardLimitFeature.ID -> RemoveForwardLimitMiuixPage(context, provider, onBack)
         AtAllNotificationBlockFeature.ID -> AtAllNotificationBlockMiuixPage(context, provider, onBack)
         SettingsFeature.ID -> SettingsEntryMiuixPage(context, provider, onBack)
-        CancelModuleEntryProvider.ID -> CancelModuleEntryMiuixPage(context, provider, onBack)
+        CancelModuleFeature.ID -> CancelModuleEntryMiuixPage(context, provider, onBack)
         PluginAgentEntryProvider.ID -> PluginAgentEntryMiuixPage(context, provider, onBack)
         FloatingShortcutFeature.ID -> FloatingShortcutMiuixPage(context, provider, onBack)
         MessageDetailsSettingsProvider.FEATURE_ID -> MessageDetailsConfigPage(
@@ -9778,8 +9778,8 @@ internal fun CancelModuleEntryMiuixPage(
                     SwitchRow(
                         sp,
                         SettingsEntrySettings.KEY_SAFE_MODE_PLUS_MENU_ENABLE,
-                        "取消模块入口",
-                        "在微信右上角加号菜单显示“取消模块”，重启微信后生效",
+                        "取消模块",
+                        "从微信首页加号菜单一键取消模块并重启微信，重启后生效",
                         SettingsEntrySettings.DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE
                     )
                 }
@@ -9831,14 +9831,6 @@ internal fun SettingsEntryMiuixPage(
                         "长按加号入口",
                         "长按微信右上角加号打开 Hchat 设置，重启微信后生效",
                         SettingsEntrySettings.DEFAULT_PLUS_LONG_PRESS_ENABLE
-                    )
-                    InsetDivider()
-                    SwitchRow(
-                        sp,
-                        SettingsEntrySettings.KEY_SAFE_MODE_PLUS_MENU_ENABLE,
-                        "取消模块入口",
-                        "在微信右上角加号菜单显示“取消模块”，重启微信后生效",
-                        SettingsEntrySettings.DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE
                     )
                 }
             }
