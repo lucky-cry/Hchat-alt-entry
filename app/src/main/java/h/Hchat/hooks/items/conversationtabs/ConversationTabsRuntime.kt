@@ -597,6 +597,46 @@ internal object ConversationTabsRuntime {
                             })
                             HLog.e("$TAG LMLayout hook LayoutStateStep(J)")
                         }
+                        method.name == "O" && method.parameterCount == 3 &&
+                            method.parameterTypes[0] == Integer.TYPE -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMStep O BEFORE tab=$selectedId " +
+                                        "arg=${param.args.getOrNull(0)} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))} " +
+                                        "caller=${callerStack()}")
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMStep O AFTER tab=$selectedId " +
+                                        "result=${param.result} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))}")
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook LMStep O")
+                        }
+                        method.name == "C" && method.parameterCount == 4 &&
+                            method.parameterTypes[0] == Integer.TYPE -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMStep C BEFORE tab=$selectedId " +
+                                        "arg=${param.args.getOrNull(0)} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))} " +
+                                        "caller=${callerStack()}")
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMStep C AFTER tab=$selectedId " +
+                                        "result=${param.result} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))}")
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook LMStep C")
+                        }
                         method.name == "scrollToPosition" && method.parameterCount == 1 -> {
                             HookRegistry.get().hook(method, object : HookCallback {
                                 override fun before(param: HookParam) {
