@@ -25,7 +25,6 @@ import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.hooks.items.conversationgroup.ConversationGroupHomeProjection
-import h.Hchat.hooks.items.conversationgroup.ConversationGroupRuntime
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.HLog
 import h.Hchat.utils.KavaReflector
@@ -520,7 +519,6 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
-            ConversationGroupRuntime.reloadConversationList()
             // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
             (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
                 rv.stopScroll()
