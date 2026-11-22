@@ -24,7 +24,6 @@ import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
-import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.items.conversationgroup.ConversationGroupHomeProjection
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.HLog
@@ -426,10 +425,6 @@ internal object ConversationTabsRuntime {
                             loadedIcons = images
                             compiledFilters = filters
                             if (config.tabs.none { it.id == selectedId }) selectedId = config.tabs.first { it.kind == ConversationTabKind.ALL }.id
-                            val restored = config.tabs.firstOrNull { it.id == selectedId }
-                            if (restored?.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
-                                selectedId = config.tabs.first { it.kind == ConversationTabKind.ALL }.id
-                            }
                             if (config.enabled && !ready) {
                                 HLog.e("$TAG 请求安装标签查询")
                                 DexInstallScheduler.schedule(ConversationTabsFeature.ID, "标签分组", DexInstallScheduler.Stage.BRIDGE) {
@@ -490,41 +485,11 @@ internal object ConversationTabsRuntime {
 
     private fun select(id: String) {
         if (id == selectedId || config.tabs.none { it.id == id }) return
-        val target = config.tabs.first { it.id == id }
-        // 微信首页进入原生空列表后，再切其他分类会留下大块空白。
-        // 未读为空时不要进入这个空态，直接留在“全部”。
-        if (target.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
-            HLog.e("$TAG 未读为空, 不切换空分类")
-            val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL }
-            if (all != null && all.id != selectedId) select(all.id)
-            return
-        }
         selectedId = id
         publish()
         liveHosts().forEach(::highlight)
         requestRefresh()
         main.postDelayed(::refreshHostAdapters, 120L)
-        main.postDelayed({
-            if (selectedId != id) return@postDelayed
-            // 停留在未读标签时，如果未读被全部读完，也要立刻退回“全部”，
-            // 避免原生列表变成空态。
-            val selectedTab = config.tabs.firstOrNull { it.id == selectedId }
-            if (selectedTab?.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
-                HLog.e("$TAG 未读已被读完, 退回全部")
-                val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL } ?: return@postDelayed
-                if (all.id != selectedId) select(all.id)
-                return@postDelayed
-            }
-            val host = liveHosts().firstOrNull() ?: return@postDelayed
-            val list = host.list ?: findConversationList(host.root) ?: return@postDelayed
-            val adapter = list.let { KavaReflector.invokeMethod(it, "getAdapter") }
-            val count = KavaReflector.invokeMethod(adapter, "getItemCount") as? Int ?: 0
-            // 首页 adapter 可能还有一个占位 header，因此空分类通常是 1 而不是 0。
-            if (count <= 1) {
-                val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL } ?: return@postDelayed
-                if (all.id != selectedId) select(all.id)
-            }
-        }, 500L)
     }
 
     private fun refreshHostAdapters() {
@@ -533,14 +498,6 @@ internal object ConversationTabsRuntime {
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
         }
-    }
-
-    private fun unreadCount(): Int {
-        // 之前用 storage().queryString 在部分账号返回 0，导致未读为空仍切进原生空态。
-        // 改用会话 API 的 getTotalUnreadCount，它和首页红点同源。
-        return runCatching {
-            WeChatApis.conversations()?.getTotalUnreadCount() ?: -1
-        }.getOrDefault(-1)
     }
 
     private fun requestRefresh(retries: Int = 0) {
