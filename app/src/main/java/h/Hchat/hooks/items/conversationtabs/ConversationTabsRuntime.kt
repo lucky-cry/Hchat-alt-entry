@@ -329,16 +329,6 @@ internal object ConversationTabsRuntime {
         val actionBar = host.actionBar
         val list = host.list
         val stripHeight = host.strip.measuredHeight
-        (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
-            hideBlankListHeader(rv)
-            // 原生空态可能把首页内容整体塞进 paddingTop；它不在 LayoutParams
-            // 上，必须在每次布局时纠正，否则分类切换后整页只剩空白。
-            if (stripHeight > 0 && rv.paddingTop > stripHeight * 3) {
-                rv.setPadding(rv.paddingLeft, 0, rv.paddingRight, rv.paddingBottom)
-                rv.translationY = 0f
-                rv.scrollToPosition(0)
-            }
-        }
         // 分类为空时原生列表高度会被压缩/重建，此时继续叠加 topMargin 会把
         // 列表整体推到屏幕中部，留下巨大空白。空列表只恢复原生间距。
         if (!host.root.isShown || actionBar == null || !actionBar.isShown ||
@@ -543,36 +533,6 @@ internal object ConversationTabsRuntime {
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
         }
-    }
-
-    private fun hideBlankListHeader(rv: androidx.recyclerview.widget.RecyclerView) {
-        for (index in 0 until rv.childCount) {
-            val child = rv.getChildAt(index) ?: continue
-            val blank = child.height > rv.height / 2
-            if (blank) {
-                HLog.e("$TAG 隐藏空态占位: ${child.javaClass.name} h=${child.height} " +
-                    "w=${child.width}")
-                child.visibility = View.GONE
-                child.layoutParams?.let { params ->
-                    if (params.height != 0) {
-                        params.height = 0
-                        child.layoutParams = params
-                    }
-                }
-            } else {
-                child.visibility = View.VISIBLE
-            }
-        }
-    }
-
-    private fun hasVisibleText(view: View): Boolean {
-        if (view is TextView && view.text?.isNotBlank() == true) return true
-        if (view is ViewGroup) {
-            for (index in 0 until view.childCount) {
-                if (hasVisibleText(view.getChildAt(index))) return true
-            }
-        }
-        return false
     }
 
     private fun unreadCount(): Int {
