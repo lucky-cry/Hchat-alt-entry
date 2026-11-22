@@ -8,8 +8,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.LruCache
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -519,6 +521,7 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+            forceListRelayout(list)
             // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
             (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
                 rv.stopScroll()
@@ -584,6 +587,31 @@ internal object ConversationTabsRuntime {
             }
         }
         return false
+    }
+
+    private fun forceListRelayout(list: View?) {
+        list ?: return
+        if (list.width <= 0 || list.height <= 0) return
+        // 空分类切换后原生列表要等一次触摸才重新布局；这里模拟一次很小
+        // 的上滑并 CANCEL，触发它重排，但不会打开会话。
+        val now = SystemClock.uptimeMillis()
+        // 用最右侧空白区域滑动，避开会话行点击；UP 后立即把选择归零。
+        val x = list.width - 8f
+        val y = list.height / 2f
+        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
+        val move = MotionEvent.obtain(now, now + 16, MotionEvent.ACTION_MOVE, x, y - 120f, 0)
+        val up = MotionEvent.obtain(now, now + 32, MotionEvent.ACTION_UP, x, y - 120f, 0)
+        runCatching {
+            list.dispatchTouchEvent(down)
+            list.dispatchTouchEvent(move)
+            list.dispatchTouchEvent(up)
+            KavaReflector.invokeMethod(list, "setSelectionWithOffset", 0)
+            list.requestLayout()
+            list.invalidate()
+        }
+        down.recycle()
+        move.recycle()
+        up.recycle()
     }
 
     private fun requestRefresh(retries: Int = 0) {
