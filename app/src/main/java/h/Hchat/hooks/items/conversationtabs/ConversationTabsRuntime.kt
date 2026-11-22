@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.LruCache
 import android.view.Gravity
 import android.view.View
@@ -72,6 +73,8 @@ internal object ConversationTabsRuntime {
     private val recyclerScrollListeners =
         WeakHashMap<View, ViewTreeObserver.OnScrollChangedListener>()
     private var taskBarOffsetHookInstalled = false
+    private var layoutDiagHooksInstalled = false
+    @Volatile private var layoutDiagUntilMs = 0L
 
     private data class Host(
         val root: ViewGroup,
@@ -492,6 +495,7 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach { host ->
             logRecyclerLayout("before-switch", host, host.list ?: findConversationList(host.root))
         }
+        layoutDiagUntilMs = SystemClock.uptimeMillis() + 3000L
         selectedId = id
         publish()
         liveHosts().forEach(::highlight)
@@ -508,6 +512,111 @@ internal object ConversationTabsRuntime {
             logRecyclerLayout("refresh-after", host, list)
             main.postDelayed({ logRecyclerLayout("refresh-delayed", host, list) }, 350L)
         }
+    }
+
+    private fun installLayoutManagerHooks(manager: Any?) {
+        manager ?: return
+        if (layoutDiagHooksInstalled) return
+        layoutDiagHooksInstalled = true
+        runCatching {
+            var current: Class<*>? = manager.javaClass
+            while (current != null && current != Any::class.java) {
+                KavaReflector.declaredMethods(current).forEach { method ->
+                    when {
+                        method.name == "onLayoutChildren" && method.parameterCount == 2 -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    logLayoutManager("LMLayout BEFORE", param.thisObject)
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    logLayoutManager("LMLayout AFTER", param.thisObject)
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook onLayoutChildren")
+                        }
+                        method.name == "scrollToPosition" && method.parameterCount == 1 -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMScroll scrollToPosition pos=${param.args.getOrNull(0)} " +
+                                        "caller=${callerStack()}")
+                                    logLayoutManager("LMScroll before", param.thisObject)
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    logLayoutManager("LMScroll after", param.thisObject)
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook scrollToPosition")
+                        }
+                        method.name == "scrollToPositionWithOffset" && method.parameterCount == 2 -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LMScroll scrollToPositionWithOffset " +
+                                        "pos=${param.args.getOrNull(0)} offset=${param.args.getOrNull(1)} " +
+                                        "caller=${callerStack()}")
+                                    logLayoutManager("LMScrollOffset before", param.thisObject)
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    logLayoutManager("LMScrollOffset after", param.thisObject)
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook scrollToPositionWithOffset")
+                        }
+                    }
+                }
+                current = current.superclass
+            }
+        }.onFailure { HLog.e("$TAG LMLayout hook 安装失败", it) }
+    }
+
+    private fun inLayoutDiagWindow(): Boolean =
+        SystemClock.uptimeMillis() <= layoutDiagUntilMs
+
+    private fun callerStack(): String = runCatching {
+        Throwable().stackTrace.drop(3).take(12).joinToString(" <- ") {
+            "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+        }
+    }.getOrDefault("")
+
+    private fun logLayoutManager(stage: String, manager: Any?) {
+        manager ?: return
+        runCatching {
+            val text = StringBuilder("$TAG $stage tab=$selectedId manager=${manager.javaClass.name}")
+            var current: Class<*>? = manager.javaClass
+            while (current != null && current != Any::class.java) {
+                KavaReflector.declaredFields(current).forEach { field ->
+                    if (KavaReflector.isStatic(field)) return@forEach
+                    val value = runCatching { KavaReflector.readField(field, manager) }.getOrNull()
+                    if (value == null || value is Number || value is Boolean || value is String) {
+                        text.append(" ${field.name}=$value")
+                    } else if (value.javaClass.name.contains("AnchorInfo") ||
+                        field.name == "mAnchorInfo"
+                    ) {
+                        text.append(" ${field.name}=${value.javaClass.simpleName}{")
+                        for (inner in KavaReflector.declaredFields(value.javaClass)) {
+                            if (KavaReflector.isStatic(inner)) continue
+                            val innerValue = runCatching { KavaReflector.readField(inner, value) }.getOrNull()
+                            if (innerValue == null || innerValue is Number || innerValue is Boolean ||
+                                innerValue is String
+                            ) {
+                                text.append("${inner.name}=$innerValue,")
+                            }
+                        }
+                        text.append("}")
+                    }
+                }
+                current = current.superclass
+            }
+            HLog.e(text.toString())
+        }.onFailure { HLog.e("$TAG $stage 记录失败", it) }
     }
 
     private fun installTaskBarOffsetHook() {
@@ -643,6 +752,7 @@ internal object ConversationTabsRuntime {
             installRecyclerScrollListener(host, list)
             val params = list?.layoutParams as? RelativeLayout.LayoutParams
             val manager = list?.let { KavaReflector.invokeMethod(it, "getLayoutManager") }
+            installLayoutManagerHooks(manager)
             val stackFromEnd = manager?.let {
                 KavaReflector.invokeMethod(it, "getStackFromEnd")
             }
