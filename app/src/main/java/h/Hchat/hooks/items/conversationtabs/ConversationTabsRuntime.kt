@@ -503,14 +503,27 @@ internal object ConversationTabsRuntime {
         main.postDelayed(::refreshHostAdapters, 120L)
     }
 
+    private fun resetListAnchor(list: View?) {
+        list ?: return
+        runCatching {
+            val before = KavaReflector.invokeMethod(list, "getFirstVisiblePosition")
+            KavaReflector.invokeMethod(list, "setSelectionWithOffset", 0)
+            HLog.e("$TAG 锚点复位 setSelectionWithOffset(0) tab=$selectedId before=$before")
+        }.onFailure { HLog.e("$TAG 锚点复位失败", it) }
+    }
+
     private fun refreshHostAdapters() {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             logRecyclerLayout("refresh-before", host, list)
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+            resetListAnchor(list)
             logRecyclerLayout("refresh-after", host, list)
-            main.postDelayed({ logRecyclerLayout("refresh-delayed", host, list) }, 350L)
+            main.postDelayed({
+                resetListAnchor(list)
+                logRecyclerLayout("refresh-delayed", host, list)
+            }, 350L)
         }
     }
 
