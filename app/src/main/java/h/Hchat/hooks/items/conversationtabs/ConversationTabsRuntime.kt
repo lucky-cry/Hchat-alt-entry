@@ -68,6 +68,7 @@ internal object ConversationTabsRuntime {
     @Volatile private var filter: ConversationTabFilter? = null
     @Volatile private var ready = false
     private val refresh = Runnable { ConversationGroupHomeProjection.refresh() }
+    private val taskBarLayoutListeners = WeakHashMap<View, View.OnLayoutChangeListener>()
 
     private data class Host(
         val root: ViewGroup,
@@ -506,18 +507,67 @@ internal object ConversationTabsRuntime {
         }
     }
 
+    private fun installTaskBarLayoutListener(host: Host, group: ViewGroup?) {
+        val taskBar = group?.let { parent ->
+            (0 until parent.childCount)
+                .map { parent.getChildAt(it) }
+                .firstOrNull { it.javaClass.simpleName.contains("TaskBarContainer") }
+        } ?: return
+
+        if (taskBarLayoutListeners.containsKey(taskBar)) return
+
+        // 只保存字符串，不在监听器中捕获 host 或 taskBar 本身。
+        val hostType = host.root.javaClass.simpleName
+
+        val listener = View.OnLayoutChangeListener {
+                view,
+                left, top, right, bottom,
+                oldLeft, oldTop, oldRight, oldBottom ->
+
+            runCatching {
+                val lp = view.layoutParams
+                val marginLp = lp as? ViewGroup.MarginLayoutParams
+                val parent = view.parent
+
+                HLog.e(
+                    "$TAG TaskBarLayout " +
+                        "tab=$selectedId host=$hostType " +
+                        "view=${view.javaClass.simpleName} " +
+                        "old=[$oldLeft,$oldTop,$oldRight,$oldBottom] " +
+                        "new=[$left,$top,$right,$bottom] " +
+                        "size=${view.width}x${view.height} " +
+                        "measured=${view.measuredWidth}x${view.measuredHeight} " +
+                        "translationY=${view.translationY} y=${view.y} " +
+                        "visibility=${view.visibility} " +
+                        "lpWidth=${lp?.width} lpHeight=${lp?.height} " +
+                        "topMargin=${marginLp?.topMargin} bottomMargin=${marginLp?.bottomMargin} " +
+                        "parent=${parent?.javaClass?.simpleName}"
+                )
+            }.onFailure {
+                HLog.e("$TAG TaskBarLayout 记录失败", it)
+            }
+        }
+
+        taskBarLayoutListeners[taskBar] = listener
+        taskBar.addOnLayoutChangeListener(listener)
+
+        HLog.e(
+            "$TAG TaskBarLayout listener-installed " +
+                "host=$hostType view=${taskBar.javaClass.simpleName}"
+        )
+    }
+
     private fun logRecyclerLayout(stage: String, host: Host, list: View?) {
         runCatching {
             val group = list as? ViewGroup
+            installTaskBarLayoutListener(host, group)
             val params = list?.layoutParams as? RelativeLayout.LayoutParams
             val manager = list?.let { KavaReflector.invokeMethod(it, "getLayoutManager") }
             val stackFromEnd = manager?.let {
-                KavaReflector.findFieldRecursive(it.javaClass, "mStackFromEnd")
-                    ?.let { field -> KavaReflector.readField(field, it) }
+                KavaReflector.invokeMethod(it, "getStackFromEnd")
             }
             val reverseLayout = manager?.let {
-                KavaReflector.findFieldRecursive(it.javaClass, "mReverseLayout")
-                    ?.let { field -> KavaReflector.readField(field, it) }
+                KavaReflector.invokeMethod(it, "getReverseLayout")
             }
             val children = if (group == null) "" else (0 until minOf(group.childCount, 3)).joinToString(";") { index ->
                 val child = group.getChildAt(index)
