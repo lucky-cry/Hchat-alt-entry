@@ -537,6 +537,37 @@ internal object ConversationTabsRuntime {
                             })
                             HLog.e("$TAG LMLayout hook onLayoutChildren")
                         }
+                        method.name == "K" && method.parameterCount == 4 &&
+                            method.parameterTypes[2].simpleName == "k1" -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG AnchorUpdate BEFORE tab=$selectedId " +
+                                        "anchor=${dumpObject(param.args.getOrNull(2))} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))} " +
+                                        "caller=${callerStack()}")
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG AnchorUpdate AFTER tab=$selectedId " +
+                                        "anchor=${dumpObject(param.args.getOrNull(2))} " +
+                                        "layoutState=${dumpObject(managerLayoutState(param.thisObject))}")
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook AnchorUpdate(K)")
+                        }
+                        method.name == "J" && method.parameterCount == 4 &&
+                            method.parameterTypes[2].simpleName == "m1" -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG LayoutStateStep AFTER tab=$selectedId " +
+                                        "layoutState=${dumpObject(param.args.getOrNull(2))}")
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook LayoutStateStep(J)")
+                        }
                         method.name == "scrollToPosition" && method.parameterCount == 1 -> {
                             HookRegistry.get().hook(method, object : HookCallback {
                                 override fun before(param: HookParam) {
@@ -585,6 +616,38 @@ internal object ConversationTabsRuntime {
             "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
         }
     }.getOrDefault("")
+
+    private fun dumpObject(obj: Any?): String {
+        obj ?: return "null"
+        val builder = StringBuilder(obj.javaClass.simpleName).append("{")
+        var current: Class<*>? = obj.javaClass
+        while (current != null && current != Any::class.java) {
+            KavaReflector.declaredFields(current).forEach { field ->
+                if (KavaReflector.isStatic(field)) return@forEach
+                val value = runCatching { KavaReflector.readField(field, obj) }.getOrNull() ?: return@forEach
+                if (value is Number || value is Boolean || value is String) {
+                    builder.append(field.name).append('=').append(value).append(',')
+                }
+            }
+            current = current.superclass
+        }
+        return builder.append('}').toString()
+    }
+
+    private fun managerLayoutState(manager: Any?): Any? {
+        manager ?: return null
+        var current: Class<*>? = manager.javaClass
+        while (current != null && current != Any::class.java) {
+            KavaReflector.declaredFields(current).forEach { field ->
+                if (KavaReflector.isStatic(field)) return@forEach
+                if (field.type.simpleName == "m1") {
+                    return runCatching { KavaReflector.readField(field, manager) }.getOrNull()
+                }
+            }
+            current = current.superclass
+        }
+        return null
+    }
 
     private fun logLayoutManager(stage: String, manager: Any?) {
         manager ?: return
