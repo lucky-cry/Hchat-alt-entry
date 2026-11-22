@@ -503,27 +503,34 @@ internal object ConversationTabsRuntime {
         main.postDelayed(::refreshHostAdapters, 120L)
     }
 
-    private fun resetListAnchor(list: View?) {
+    private val itemAnimatorDisabled = WeakHashMap<View, Boolean>()
+
+    private fun disableItemAnimator(list: View?) {
         list ?: return
+        if (itemAnimatorDisabled.containsKey(list)) return
+        itemAnimatorDisabled[list] = true
         runCatching {
-            val before = KavaReflector.invokeMethod(list, "getFirstVisiblePosition")
-            KavaReflector.invokeMethod(list, "setSelectionWithOffset", 0)
-            HLog.e("$TAG 锚点复位 setSelectionWithOffset(0) tab=$selectedId before=$before")
-        }.onFailure { HLog.e("$TAG 锚点复位失败", it) }
+            var setter: java.lang.reflect.Method? = null
+            var current: Class<*>? = list.javaClass
+            while (current != null && setter == null) {
+                setter = KavaReflector.declaredMethods(current)
+                    .firstOrNull { it.name == "setItemAnimator" && it.parameterCount == 1 }
+                current = current.superclass
+            }
+            KavaReflector.invoke(setter, list, null)
+            HLog.e("$TAG 禁用列表动画 setItemAnimator(null) tab=$selectedId found=${setter != null}")
+        }.onFailure { HLog.e("$TAG 禁用列表动画失败", it) }
     }
 
     private fun refreshHostAdapters() {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
+            disableItemAnimator(list)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             logRecyclerLayout("refresh-before", host, list)
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
-            resetListAnchor(list)
             logRecyclerLayout("refresh-after", host, list)
-            main.postDelayed({
-                resetListAnchor(list)
-                logRecyclerLayout("refresh-delayed", host, list)
-            }, 350L)
+            main.postDelayed({ logRecyclerLayout("refresh-delayed", host, list) }, 350L)
         }
     }
 
