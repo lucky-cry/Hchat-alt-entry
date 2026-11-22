@@ -186,6 +186,7 @@ object ConversationGroupRuntime {
             })
         }
         captureConversationStorageByConstructor(context)
+        resolveConversationStorageFromService(context)
         HLog.e("$TAG 定位 share_reset")
         val shareRecentAdapterReset = locateShareRecentAdapterResetMethod(context) ?: return installAbort("share_reset")
         HLog.e("$TAG 定位 share_forward")
@@ -2353,6 +2354,34 @@ object ConversationGroupRuntime {
         }.onFailure {
             HLog.e("$TAG 调用微信原生会话归拢失败: count=${talkers.size} ${it.message}", it)
         }.getOrDefault(false)
+    }
+
+    private fun resolveConversationStorageFromService(context: FeatureContext) {
+        if (conversationStorage != null) return
+        runCatching {
+            val loader = context.hostClassLoader()
+            val storageServiceClass = KavaReflector.loadClass(
+                "com.tencent.mm.plugin.messenger.foundation.h2",
+                loader
+            ) ?: return
+            val service = context.dexKitBridge().findMethod(
+                FindMethod().apply {
+                    matcher(MethodMatcher().apply {
+                        modifiers(java.lang.reflect.Modifier.STATIC)
+                        paramTypes(Class::class.java)
+                        usingEqStrings("calling getService(...)")
+                    })
+                }
+            ).firstOrNull()
+                ?.getMethodInstance(loader)
+                ?.invoke(null, storageServiceClass)
+                ?: return
+            val storage = storageServiceClass.getField("h").get(service)
+            conversationStorage = storage
+            HLog.e("$TAG 服务定位 ConversationStorage: ${storage?.javaClass?.name}")
+        }.onFailure {
+            HLog.e("$TAG 服务定位 ConversationStorage 失败: ${it.message}", it)
+        }
     }
 
     private fun captureConversationStorageByConstructor(context: FeatureContext) {
