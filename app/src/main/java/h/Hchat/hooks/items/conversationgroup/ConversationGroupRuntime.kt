@@ -414,7 +414,7 @@ object ConversationGroupRuntime {
      * notifyConversationChanged(event=5)，等价于 wcx 的 reloadConversations。
      * 不能注入触摸事件，否则会误触会话行。
      */
-    fun reloadConversationList(): Boolean {
+    fun reloadConversationList(eventType: Int = 5): Boolean {
         val storage = conversationStorage ?: run {
             HLog.e("$TAG 会话列表刷新跳过: conversationStorage=null")
             return false
@@ -431,8 +431,8 @@ object ConversationGroupRuntime {
                 return false
             }
             method.isAccessible = true
-            method.invoke(storage, 5, storage, "")
-            HLog.e("$TAG 会话列表刷新已通知")
+            method.invoke(storage, eventType, storage, "")
+            HLog.e("$TAG 会话列表刷新已通知 event=$eventType")
             true
         } catch (error: Throwable) {
             HLog.e("$TAG 会话列表刷新失败: ${error.message}", error)
