@@ -597,20 +597,25 @@ internal object ConversationTabsRuntime {
                     val value = runCatching { KavaReflector.readField(field, manager) }.getOrNull()
                     if (value == null || value is Number || value is Boolean || value is String) {
                         text.append(" ${field.name}=$value")
-                    } else if (value.javaClass.name.contains("AnchorInfo") ||
-                        field.name == "mAnchorInfo"
-                    ) {
+                    } else {
+                        val objectType = value.javaClass.name
                         text.append(" ${field.name}=${value.javaClass.simpleName}{")
-                        for (inner in KavaReflector.declaredFields(value.javaClass)) {
-                            if (KavaReflector.isStatic(inner)) continue
-                            val innerValue = runCatching { KavaReflector.readField(inner, value) }.getOrNull()
-                            if (innerValue == null || innerValue is Number || innerValue is Boolean ||
-                                innerValue is String
-                            ) {
-                                text.append("${inner.name}=$innerValue,")
+                        var innerCount = 0
+                        var innerClass: Class<*>? = value.javaClass
+                        while (innerClass != null && innerClass != Any::class.java) {
+                            for (inner in KavaReflector.declaredFields(innerClass)) {
+                                if (KavaReflector.isStatic(inner) || innerCount >= 12) continue
+                                val innerValue = runCatching {
+                                    KavaReflector.readField(inner, value)
+                                }.getOrNull() ?: continue
+                                if (innerValue is Number || innerValue is Boolean || innerValue is String) {
+                                    text.append("${inner.name}=$innerValue,")
+                                    innerCount++
+                                }
                             }
+                            innerClass = innerClass.superclass
                         }
-                        text.append("}")
+                        text.append("class=$objectType}")
                     }
                 }
                 current = current.superclass
