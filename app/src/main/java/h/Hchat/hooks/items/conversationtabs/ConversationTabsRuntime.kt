@@ -495,6 +495,11 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach { host ->
             logRecyclerLayout("before-switch", host, host.list ?: findConversationList(host.root))
         }
+        if (selectedId == "unread" && id != "unread") {
+            liveHosts().forEach { host ->
+                beginTemporaryAnimatorDisable(host.list ?: findConversationList(host.root))
+            }
+        }
         layoutDiagUntilMs = SystemClock.uptimeMillis() + 3000L
         selectedId = id
         publish()
@@ -503,12 +508,11 @@ internal object ConversationTabsRuntime {
         main.postDelayed(::refreshHostAdapters, 120L)
     }
 
-    private val itemAnimatorDisabled = WeakHashMap<View, Boolean>()
+    private val originalItemAnimators = WeakHashMap<View, Any?>()
+    private val itemAnimatorRestoreTasks = WeakHashMap<View, Runnable>()
 
-    private fun disableItemAnimator(list: View?) {
+    private fun setItemAnimator(list: View?, animator: Any?) {
         list ?: return
-        if (itemAnimatorDisabled.containsKey(list)) return
-        itemAnimatorDisabled[list] = true
         runCatching {
             var setter: java.lang.reflect.Method? = null
             var current: Class<*>? = list.javaClass
@@ -517,15 +521,43 @@ internal object ConversationTabsRuntime {
                     .firstOrNull { it.name == "setItemAnimator" && it.parameterCount == 1 }
                 current = current.superclass
             }
-            KavaReflector.invoke(setter, list, null)
-            HLog.e("$TAG 禁用列表动画 setItemAnimator(null) tab=$selectedId found=${setter != null}")
-        }.onFailure { HLog.e("$TAG 禁用列表动画失败", it) }
+            KavaReflector.invoke(setter, list, animator)
+        }.onFailure { HLog.e("$TAG setItemAnimator 失败", it) }
+    }
+
+    private fun getItemAnimator(list: View?): Any? {
+        list ?: return null
+        var current: Class<*>? = list.javaClass
+        while (current != null) {
+            val getter = KavaReflector.declaredMethods(current)
+                .firstOrNull { it.name == "getItemAnimator" && it.parameterCount == 0 }
+            if (getter != null) return KavaReflector.invoke(getter, list)
+            current = current.superclass
+        }
+        return null
+    }
+
+    private fun beginTemporaryAnimatorDisable(list: View?) {
+        list ?: return
+        if (!originalItemAnimators.containsKey(list)) {
+            originalItemAnimators[list] = getItemAnimator(list)
+        }
+        setItemAnimator(list, null)
+        itemAnimatorRestoreTasks.remove(list)?.let { main.removeCallbacks(it) }
+        val restore = Runnable {
+            itemAnimatorRestoreTasks.remove(list)
+            val original = originalItemAnimators.remove(list)
+            setItemAnimator(list, original)
+            HLog.e("$TAG 恢复列表动画 tab=$selectedId original=${original?.javaClass?.name}")
+        }
+        itemAnimatorRestoreTasks[list] = restore
+        main.postDelayed(restore, 600L)
+        HLog.e("$TAG 临时禁用列表动画 tab=$selectedId")
     }
 
     private fun refreshHostAdapters() {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
-            disableItemAnimator(list)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             logRecyclerLayout("refresh-before", host, list)
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
