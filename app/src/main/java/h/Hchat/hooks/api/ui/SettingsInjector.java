@@ -1,6 +1,8 @@
 package h.Hchat.hooks.api.ui;
 
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
@@ -15,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.android.dx.stock.ProxyBuilder;
 
@@ -30,6 +33,7 @@ import java.util.Map;
 
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
+import h.Hchat.hooks.core.SafeMode;
 
 import h.Hchat.dexkit.SettingsDexFinder;
 import h.Hchat.hooks.core.HookRegistry;
@@ -69,6 +73,8 @@ public class SettingsInjector {
     private static final String QUICK_TERMINATE_PLUS_MENU_TITLE = "快捷终止";
     private static final int PLUGIN_AGENT_PLUS_MENU_ID = -1212373071;
     private static final String PLUGIN_AGENT_PLUS_MENU_TITLE = "插件 Agent";
+    private static final int SAFE_MODE_PLUS_MENU_ID = -1212373070;
+    private static final String SAFE_MODE_PLUS_MENU_TITLE = "取消模块并重启";
 
     private final Context hostContext;
     private final ClassLoader classLoader;
@@ -126,10 +132,8 @@ public class SettingsInjector {
     }
 
     private boolean isPlusMenuHookRequired() {
-        return isPlusMenuEnabled()
-                || isPluginAgentPlusMenuEnabled()
-                || isQuickReadPlusMenuEnabled()
-                || isQuickTerminatePlusMenuEnabled();
+        // “取消模块并重启”是应急入口，只要加号菜单可用就保留。
+        return true;
     }
 
     private boolean isPlusLongPressEnabled() {
@@ -855,6 +859,50 @@ public class SettingsInjector {
 
                         param.setResult(null);
                         dismissPlusMenu(param.getThisObject());
+                        if (itemId == SAFE_MODE_PLUS_MENU_ID) {
+                            Context safeModeContext = findContextFieldValue(param.getThisObject());
+                            if (safeModeContext != null) {
+                                SafeMode.INSTANCE.request(safeModeContext);
+                            }
+                            Toast.makeText(
+                                    safeModeContext != null ? safeModeContext : hostContext,
+                                    "已取消模块：重启后本次不加载 Hchat，下次启动自动恢复",
+                                    Toast.LENGTH_LONG
+                            ).show();
+                            // 先用 AlarmManager 预约冷启动，再杀掉进程；否则只关不启。
+                            Context relaunchContext =
+                                    safeModeContext != null ? safeModeContext : hostContext;
+                            try {
+                                Intent launch = new Intent();
+                                launch.setClassName(
+                                        relaunchContext.getPackageName(),
+                                        "com.tencent.mm.ui.LauncherUI");
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                        | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                                PendingIntent pending = PendingIntent.getActivity(
+                                        relaunchContext,
+                                        0x4843,
+                                        launch,
+                                        PendingIntent.FLAG_UPDATE_CURRENT
+                                                | PendingIntent.FLAG_IMMUTABLE);
+                                AlarmManager alarmManager =
+                                        (AlarmManager) relaunchContext.getSystemService(
+                                                Context.ALARM_SERVICE);
+                                if (alarmManager != null) {
+                                    alarmManager.set(
+                                            AlarmManager.RTC,
+                                            System.currentTimeMillis() + 1500L,
+                                            pending);
+                                }
+                            } catch (Throwable e) {
+                                h.Hchat.utils.HLog.e(
+                                        TAG + " 预约重启微信失败: " + e.getMessage(), e);
+                            }
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                android.os.Process.killProcess(android.os.Process.myPid());
+                            }, 500L);
+                            return;
+                        }
                         if (itemId == QUICK_TERMINATE_PLUS_MENU_ID) {
                             QuickTerminateRuntime.terminateCurrentProcess();
                             return;
@@ -915,7 +963,11 @@ public class SettingsInjector {
                 && containsPlusMenuItem(
                         items,
                         QUICK_TERMINATE_PLUS_MENU_ID,
-                        QUICK_TERMINATE_PLUS_MENU_TITLE)) {
+                        QUICK_TERMINATE_PLUS_MENU_TITLE)
+                && containsPlusMenuItem(
+                        items,
+                        SAFE_MODE_PLUS_MENU_ID,
+                        SAFE_MODE_PLUS_MENU_TITLE)) {
             ensurePlusMenuAdapterViewHook(adapter);
             if (adapter != null) {
                 adapter.notifyDataSetChanged();
@@ -966,6 +1018,15 @@ public class SettingsInjector {
                     sampleItem,
                     QUICK_TERMINATE_PLUS_MENU_ID,
                     QUICK_TERMINATE_PLUS_MENU_TITLE);
+        }
+        if (!containsPlusMenuItem(items, SAFE_MODE_PLUS_MENU_ID, SAFE_MODE_PLUS_MENU_TITLE)) {
+            changed |= appendPlusMenuItem(
+                    items,
+                    sampleWrapper.getClass(),
+                    sampleItem,
+                    SAFE_MODE_PLUS_MENU_ID,
+                    SAFE_MODE_PLUS_MENU_TITLE);
+            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 已追加安全模式入口 changed=" + changed);
         }
         if (changed && adapter != null) {
             adapter.notifyDataSetChanged();

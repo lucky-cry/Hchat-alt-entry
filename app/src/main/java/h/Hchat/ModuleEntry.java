@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import h.Hchat.hooks.core.HookCallback;
 import h.Hchat.hooks.core.HookParam;
+import h.Hchat.hooks.core.SafeMode;
 import h.Hchat.hooks.items.conversationgroup.ConversationGroupClickBridge;
 
 /**
@@ -81,6 +82,13 @@ public class ModuleEntry {
         HLog.e(TAG + " bootstrap 开始: package=" + lpparam.packageName
                 + " process=" + lpparam.processName
                 + " app=" + lpparam.app);
+
+        // 一次性安全模式：本次启动只跳过主进程全部 Hook，标记随即删除，
+        // 下一次启动自动恢复模块。
+        if (isMainProcess(lpparam) && SafeMode.INSTANCE.consumeForPackage(lpparam.packageName)) {
+            HLog.e(TAG + " 安全模式：本次启动跳过 Hchat，下次启动自动恢复");
+            return;
+        }
 
         // 热更新加载发生在 Tinker attach 阶段，必须早于普通功能初始化安装。
         installHotUpdateEarlyHook(lpparam);
