@@ -551,6 +551,23 @@ internal object ConversationTabsRuntime {
             var current: Class<*>? = manager.javaClass
             while (current != null && current != Any::class.java) {
                 KavaReflector.declaredMethods(current).forEach { method ->
+                    if (method.parameterTypes.any { it.simpleName == "m1" }) {
+                        HookRegistry.get().hook(method, object : HookCallback {
+                            override fun before(param: HookParam) {
+                                if (!inLayoutDiagWindow()) return
+                                HLog.e("$TAG StateStep ${method.name} BEFORE tab=$selectedId " +
+                                    "args=${param.args.joinToString(",")} " +
+                                    "layoutState=${dumpObject(managerLayoutState(param.thisObject))}")
+                            }
+
+                            override fun after(param: HookParam) {
+                                if (!inLayoutDiagWindow()) return
+                                HLog.e("$TAG StateStep ${method.name} AFTER tab=$selectedId " +
+                                    "layoutState=${dumpObject(managerLayoutState(param.thisObject))}")
+                            }
+                        })
+                        HLog.e("$TAG LMLayout hook StateStep ${method.name}")
+                    }
                     when {
                         method.name == "onLayoutChildren" && method.parameterCount == 2 -> {
                             HookRegistry.get().hook(method, object : HookCallback {
