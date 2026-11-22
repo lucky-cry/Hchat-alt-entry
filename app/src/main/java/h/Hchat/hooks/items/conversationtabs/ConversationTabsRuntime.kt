@@ -71,6 +71,7 @@ internal object ConversationTabsRuntime {
     private val taskBarLayoutListeners = WeakHashMap<View, View.OnLayoutChangeListener>()
     private val recyclerScrollListeners =
         WeakHashMap<View, ViewTreeObserver.OnScrollChangedListener>()
+    private var taskBarOffsetHookInstalled = false
 
     private data class Host(
         val root: ViewGroup,
@@ -509,6 +510,48 @@ internal object ConversationTabsRuntime {
         }
     }
 
+    private fun installTaskBarOffsetHook() {
+        if (taskBarOffsetHookInstalled) return
+        taskBarOffsetHookInstalled = true
+        runCatching {
+            val method = android.view.View::class.java.getDeclaredMethod(
+                "offsetTopAndBottom",
+                Int::class.javaPrimitiveType
+            )
+            method.isAccessible = true
+            HookRegistry.get().hook(method, object : HookCallback {
+                override fun before(param: HookParam) {
+                    val view = param.thisObject as? View ?: return
+                    if (!view.javaClass.simpleName.contains("TaskBarContainer")) return
+                    val offset = param.args.getOrNull(0) as? Int ?: return
+                    HLog.e("$TAG TaskBarOffset before tab=$selectedId " +
+                        "top=${view.top} offset=$offset caller=${offsetCaller()}")
+                }
+
+                override fun after(param: HookParam) {
+                    val view = param.thisObject as? View ?: return
+                    if (!view.javaClass.simpleName.contains("TaskBarContainer")) return
+                    val offset = param.args.getOrNull(0) as? Int ?: return
+                    HLog.e("$TAG TaskBarOffset after tab=$selectedId " +
+                        "top=${view.top} offset=$offset")
+                }
+            })
+            HLog.e("$TAG TaskBarOffset listener-installed")
+        }.onFailure {
+            taskBarOffsetHookInstalled = false
+            HLog.e("$TAG TaskBarOffset 安装失败", it)
+        }
+    }
+
+    private fun offsetCaller(): String = runCatching {
+        Throwable().stackTrace
+            .drop(2)
+            .take(10)
+            .joinToString(" <- ") {
+                "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+            }
+    }.getOrDefault("")
+
     private fun installRecyclerScrollListener(host: Host, list: View?) {
         // 宿主 ConversationRecyclerView 的 RecyclerView 类来自微信 ClassLoader，
         // 与模块内 AndroidX 不是同一个类，不能直接 as RecyclerView。
@@ -593,6 +636,7 @@ internal object ConversationTabsRuntime {
     }
 
     private fun logRecyclerLayout(stage: String, host: Host, list: View?) {
+        installTaskBarOffsetHook()
         runCatching {
             val group = list as? ViewGroup
             installTaskBarLayoutListener(host, group)
