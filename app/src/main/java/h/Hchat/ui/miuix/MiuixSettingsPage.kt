@@ -9790,6 +9790,14 @@ internal fun SettingsEntryMiuixPage(
                         "长按微信右上角加号打开 Hchat 设置，重启微信后生效",
                         SettingsEntrySettings.DEFAULT_PLUS_LONG_PRESS_ENABLE
                     )
+                    InsetDivider()
+                    SwitchRow(
+                        sp,
+                        SettingsEntrySettings.KEY_SAFE_MODE_PLUS_MENU_ENABLE,
+                        "取消模块入口",
+                        "在微信右上角加号菜单显示“取消模块”，重启微信后生效",
+                        SettingsEntrySettings.DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE
+                    )
                 }
             }
         }

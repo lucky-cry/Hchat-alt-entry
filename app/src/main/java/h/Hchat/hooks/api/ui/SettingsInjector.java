@@ -74,7 +74,7 @@ public class SettingsInjector {
     private static final int PLUGIN_AGENT_PLUS_MENU_ID = -1212373071;
     private static final String PLUGIN_AGENT_PLUS_MENU_TITLE = "插件 Agent";
     private static final int SAFE_MODE_PLUS_MENU_ID = -1212373070;
-    private static final String SAFE_MODE_PLUS_MENU_TITLE = "取消模块并重启";
+    private static final String SAFE_MODE_PLUS_MENU_TITLE = "取消模块";
 
     private final Context hostContext;
     private final ClassLoader classLoader;
@@ -131,9 +131,16 @@ public class SettingsInjector {
         return entrySettings != null && entrySettings.pluginAgentPlusMenuEnabled();
     }
 
+    private boolean isSafeModePlusMenuEnabled() {
+        return entrySettings != null && entrySettings.safeModePlusMenuEnabled();
+    }
+
     private boolean isPlusMenuHookRequired() {
-        // “取消模块并重启”是应急入口，只要加号菜单可用就保留。
-        return true;
+        return isPlusMenuEnabled()
+                || isPluginAgentPlusMenuEnabled()
+                || isQuickReadPlusMenuEnabled()
+                || isQuickTerminatePlusMenuEnabled()
+                || isSafeModePlusMenuEnabled();
     }
 
     private boolean isPlusLongPressEnabled() {
@@ -953,6 +960,12 @@ public class SettingsInjector {
                     PLUGIN_AGENT_PLUS_MENU_ID,
                     PLUGIN_AGENT_PLUS_MENU_TITLE);
         }
+        if (!isSafeModePlusMenuEnabled()) {
+            changed |= removePlusMenuItem(
+                    items,
+                    SAFE_MODE_PLUS_MENU_ID,
+                    SAFE_MODE_PLUS_MENU_TITLE);
+        }
         if (!isPlusMenuHookRequired()) {
             if (changed && adapter != null) adapter.notifyDataSetChanged();
             return;
@@ -964,10 +977,11 @@ public class SettingsInjector {
                         items,
                         QUICK_TERMINATE_PLUS_MENU_ID,
                         QUICK_TERMINATE_PLUS_MENU_TITLE)
-                && containsPlusMenuItem(
-                        items,
-                        SAFE_MODE_PLUS_MENU_ID,
-                        SAFE_MODE_PLUS_MENU_TITLE)) {
+                && (!isSafeModePlusMenuEnabled()
+                        || containsPlusMenuItem(
+                                items,
+                                SAFE_MODE_PLUS_MENU_ID,
+                                SAFE_MODE_PLUS_MENU_TITLE))) {
             ensurePlusMenuAdapterViewHook(adapter);
             if (adapter != null) {
                 adapter.notifyDataSetChanged();
@@ -1019,7 +1033,8 @@ public class SettingsInjector {
                     QUICK_TERMINATE_PLUS_MENU_ID,
                     QUICK_TERMINATE_PLUS_MENU_TITLE);
         }
-        if (!containsPlusMenuItem(items, SAFE_MODE_PLUS_MENU_ID, SAFE_MODE_PLUS_MENU_TITLE)) {
+        if (isSafeModePlusMenuEnabled()
+                && !containsPlusMenuItem(items, SAFE_MODE_PLUS_MENU_ID, SAFE_MODE_PLUS_MENU_TITLE)) {
             changed |= appendPlusMenuItem(
                     items,
                     sampleWrapper.getClass(),
@@ -1412,7 +1427,8 @@ public class SettingsInjector {
     }
 
     private void applyPlusMenuIcon(View rowView, int itemId) {
-        if (itemId == QUICK_TERMINATE_PLUS_MENU_ID) {
+        if (itemId == QUICK_TERMINATE_PLUS_MENU_ID
+                || itemId == SAFE_MODE_PLUS_MENU_ID) {
             applyQuickTerminatePowerIcon(rowView);
         } else {
             applyHchatPlusMenuIcon(rowView);

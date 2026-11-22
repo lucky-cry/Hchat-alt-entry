@@ -18,13 +18,19 @@ class SettingsEntrySettings(context: Context) {
         return prefs.getBoolean(KEY_PLUGIN_AGENT_PLUS_MENU_ENABLE, DEFAULT_PLUGIN_AGENT_PLUS_MENU_ENABLE)
     }
 
+    fun safeModePlusMenuEnabled(): Boolean {
+        return prefs.getBoolean(KEY_SAFE_MODE_PLUS_MENU_ENABLE, DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE)
+    }
+
     companion object {
         const val PREFS_NAME = "settings_entry"
         const val KEY_PLUS_MENU_ENABLE = "plus_menu_enable"
         const val KEY_PLUS_LONG_PRESS_ENABLE = "plus_long_press_enable"
         const val KEY_PLUGIN_AGENT_PLUS_MENU_ENABLE = "plugin_agent_plus_menu_enable"
+        const val KEY_SAFE_MODE_PLUS_MENU_ENABLE = "safe_mode_plus_menu_enable"
         const val DEFAULT_PLUS_MENU_ENABLE = false
         const val DEFAULT_PLUS_LONG_PRESS_ENABLE = false
         const val DEFAULT_PLUGIN_AGENT_PLUS_MENU_ENABLE = false
+        const val DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE = true
     }
 }
