@@ -542,31 +542,6 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
-            // 不滚动、不模拟滑动：通过 adapter 重绑 + 强制测量布局，
-            // 让原生列表在空分类后重新排列。
-            list?.let { recycler ->
-                runCatching {
-                    val count = KavaReflector.invokeMethod(adapter, "getItemCount") as? Int ?: 0
-                    if (count > 0) {
-                        KavaReflector.invokeMethod(adapter, "notifyItemRangeChanged", 0, count)
-                    }
-                    // 重新挂同一个 adapter，让 RecyclerView 完整重建子项布局；
-                    // 这不是滚动，也不会移动可见列表。
-                    val setAdapter = KavaReflector.declaredMethods(recycler.javaClass)
-                        .firstOrNull { it.name == "setAdapter" && it.parameterCount == 1 }
-                    if (setAdapter != null && adapter != null) {
-                        setAdapter.isAccessible = true
-                        setAdapter.invoke(recycler, null)
-                        setAdapter.invoke(recycler, adapter)
-                    }
-                    recycler.requestLayout()
-                    recycler.invalidate()
-                    (recycler.parent as? View)?.requestLayout()
-                    HLog.e("$TAG 原生列表重新布局: items=$count")
-                }.onFailure {
-                    HLog.e("$TAG 原生列表重新布局失败: ${it.message}", it)
-                }
-            }
         }
     }
 
