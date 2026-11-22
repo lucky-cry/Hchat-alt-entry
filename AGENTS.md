@@ -9,19 +9,36 @@
 - `app/src/main/assets/script_plugin_agent_guide.md`：脚本插件 Agent 的运行时能力清单
 - `skills/hchat-project/SKILL.md`：长期协作规则
 
+## 仓库与目标环境
+
+- 当前工作仓库：`origin = https://github.com/lucky-cry/Hchat-alt-entry.git`
+- 当前开发分支：`feat/libxposed-102`
+- 上游参考：`upstream = https://github.com/Hchat-dev/Hchat-alt-entry.git`
+- 当前主线适配：微信 `8.0.80`（versionCode `3220`），`arm64-v8a`，Android 17 / HyperOS。
+- 其他微信版本没有逐版验证时，必须明确写“未验证”，不能假设兼容。
+- 本分支只支持 `arm64-v8a` 和 64 位微信进程；新增 native 库只提供 `arm64-v8a`。
+
 ## 开发底线
 
-- 当前公开仓库的上游地址是 `https://github.com/ljh520134/Hchat-alt-entry`，默认基准分支是 `alt-entry`。
 - 先读取 `git status` 和相关源码，再修改；不要覆盖别人未提交的工作。
-- 不确定微信内部类、方法、字段、数据库或 Intent 时必须先用 DexClub 逆向确认，不能凭记忆猜混淆名称。
-- 需要多版本兼容时，尽量横向检查 8.0.49、8.0.58、8.0.66、8.0.68、8.0.72、8.0.74、8.0.76、8.0.77、8.0.78；没有对应 APK 时要明确说明没有验证。
+- 不确定微信内部类、方法、字段、数据库或 Intent 时，先用 DexClub / DexKit 逆向确认，不能凭记忆猜混淆名称。
 - 修改 DexKit 定位时必须考虑缓存、微信版本、热更新和 ClassLoader；不要每次启动无条件重跑定位。
 - 新增反射代码走 `h.Hchat.utils.KavaReflector`；模块错误日志走 `HLog.e(...)`。
 - 新增功能、公共 API、脚本 API、设置入口、构建流程或文件路径时，同步更新相关文档。
 - 默认不在本地运行 Gradle；只有用户明确要求构建或验证时才构建。低内存机器优先使用 GitHub Actions。
-- 本分支只支持 `arm64-v8a` 和 64 位微信进程；不再支持 ARM32 / 32 位微信。新增或替换 native 库只提供 `arm64-v8a`。
 - 不要提交 keystore、APK、`local.properties`、构建缓存、服务器密码、API key、Token、聊天数据库或个人媒体。
 - 提交信息和 PR 标题、说明使用中文。
+
+## 功能结构约定
+
+- 功能实现放在 `app/src/main/java/h/Hchat/hooks/items/<feature>/`。
+- 新功能在 `h.Hchat.hooks.core.FeatureRegistry` 注册，设置页通过 `FeatureSettingsProvider` 暴露入口。
+- 设置页路由和分组入口：
+  - 分组入口在 `MiuixSettingsPage.kt`；
+  - 页面实现在 `MiuixSettingsPagePages.kt` / `MiuixSettingsPageSections.kt`。
+- 新功能开关必须真正控制运行时行为，不能只改设置页状态。
+- 模块运行在微信进程时，宿主 `Context` 与模块自身 Context 不同；配置读写统一走 `HchatStorage.preferences(hostContext, ...)`。
+- 宿主 ClassLoader 加载的 AndroidX 类与模块内依赖类不是同一个类：不要用模块内的 `is androidx.recyclerview.widget.RecyclerView` 判断宿主对象；优先用反射/DexKit 或宿主方法。
 
 ## Bug 排查与测试日志
 
@@ -37,9 +54,24 @@
 - 先根据日志确认根因，再改代码；修复后保留一条关键成功/失败日志，便于回归。
 - 正式版可以保留少量关键失败日志，详细调试日志仅用于测试版，避免长期刷屏。
 
+## 构建与发布
+
+- 正式包统一走 GitHub Actions：`.github/workflows/android-single.yml`（`workflow_dispatch`）。
+- 工作流会自动计算下一个 `6.x.y` 版本、构建签名 APK、创建 GitHub Release，并可选推送 Telegram。
+- 正式签名证书：`CN=lucky-cry, O=Hchat, C=CN`。
+- 本地测试包与正式包使用同一签名，但本地测试包可能使用更高 versionCode；正式包安装到测试机前，如提示降级，需要先卸载测试版或明确允许降级。
+- **打包正式版前必须得到用户明确确认；未经确认不得推送 release、不得上传正式 APK。**
+- 用户流程要求：先在本地完成构建和设备验证，再推送 GitHub，最后再询问是否打包正式版。
+- 用户明确要求“推送并打包”时，才执行 push + workflow dispatch + release 验证。
+
 ## 已知未修复问题
 
-- 标签分组：未读为空时切换到其他分类，微信首页列表会被 `TaskBarContainer`/空态布局推到下半屏，出现大块空白。已尝试重置 topMargin、padding、translation、滚动和 `stackFromEnd`，并确认 `ConversationRecyclerView` 直接父类是宿主 ClassLoader 的 `WxRecyclerView`；隐藏 `TaskBarContainer` 或空态 `LinearLayout` 会破坏首页布局。后续应从标签筛选查询阶段避免进入原生空态，而不是事后改 View 树。相关提交到 `3e827c1`、`be8f93a`、`00525e7`。
+- 标签分组：未读为空时切换到其他分类，微信首页列表会被 `TaskBarContainer` / 空态布局推到下半屏，出现大块空白。
+  - 已确认 `ConversationRecyclerView` 直接父类是宿主 ClassLoader 的 `WxRecyclerView`；
+  - 已尝试重置 topMargin、padding、translation、滚动、`stackFromEnd`，以及隐藏 `TaskBarContainer` / 空态 `LinearLayout`；
+  - 隐藏这些容器会破坏首页布局，不能作为修复方案；
+  - 后续应从标签筛选查询阶段避免进入原生空态，而不是事后改 View 树；
+  - 相关提交：`3e827c1`、`be8f93a`、`00525e7`、`e8e096e`、`7ce2046`、`1731cdf`。
 
 ## 修改完成前
 
@@ -51,4 +83,10 @@ git diff --check
 git diff --stat
 ```
 
-能运行测试时再运行对应测试。不要把“编译失败”隐藏成“功能已完成”，也不要把未经设备验证的行为写成已验证。
+能运行测试时再运行对应测试，例如：
+
+```sh
+node scripts/run_conversation_group_parent_runtime_tests.cjs <maven缓存目录>
+```
+
+不要把“编译失败”隐藏成“功能已完成”，也不要把未经设备验证的行为写成已验证。
