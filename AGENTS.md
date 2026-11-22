@@ -64,14 +64,12 @@
 - 用户流程要求：先在本地完成构建和设备验证，再推送 GitHub，最后再询问是否打包正式版。
 - 用户明确要求“推送并打包”时，才执行 push + workflow dispatch + release 验证。
 
-## 已知未修复问题
+## 已修复问题
 
-- 标签分组：未读为空时切换到其他分类，微信首页列表会被 `TaskBarContainer` / 空态布局推到下半屏，出现大块空白。
-  - 已确认 `ConversationRecyclerView` 直接父类是宿主 ClassLoader 的 `WxRecyclerView`；
-  - 已尝试重置 topMargin、padding、translation、滚动、`stackFromEnd`，以及隐藏 `TaskBarContainer` / 空态 `LinearLayout`；
-  - 隐藏这些容器会破坏首页布局，不能作为修复方案；
-  - 后续应从标签筛选查询阶段避免进入原生空态，而不是事后改 View 树；
-  - 相关提交：`3e827c1`、`be8f93a`、`00525e7`、`e8e096e`、`7ce2046`、`1731cdf`。
+- 标签分组：从「未读」切到其他分类时，宿主 `ItemAnimator` 的预测动画会让 `LinearLayoutManager` 在 `onLayoutChildren` 中执行 `offsetChildrenVertical(1588)`，把 `TaskBarContainer` 从 `top=-2068` 推到 `-480`，首页顶部出现大块空白。
+  - 修复：离开「未读」前临时保存并置空宿主列表 `ItemAnimator`，600ms 后恢复；避开预测布局，不修改滚动位置和 View 树。
+  - 快速切换标签偶发不生效：`requestRefresh` 的旧延迟链取消无效、多个投影刷新并发，旧查询结果可能覆盖新结果。现已按切换代次只保留一条刷新链，取消旧 `refreshHostAdapters`，并把 `ConversationGroupHomeProjection.refresh` 改为串行、运行期间的新请求结束后补跑。
+  - 历史排查提交：`3e827c1`、`be8f93a`、`00525e7`、`e8e096e`、`7ce2046`、`1731cdf`；定位过程提交 `b9e0f35` 至 `1f12fc3`。
 
 ## 修改完成前
 
