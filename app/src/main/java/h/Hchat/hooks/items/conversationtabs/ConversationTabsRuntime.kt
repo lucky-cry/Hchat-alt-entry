@@ -614,6 +614,24 @@ internal object ConversationTabsRuntime {
                             })
                             HLog.e("$TAG LMLayout hook LayoutStateStep(J)")
                         }
+                        method.name == "G" && method.parameterCount == 1 &&
+                            method.returnType == Integer.TYPE -> {
+                            HookRegistry.get().hook(method, object : HookCallback {
+                                override fun before(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG ExtraSpace G BEFORE tab=$selectedId " +
+                                        "state=${dumpObject(param.args.getOrNull(0))} " +
+                                        "stateText=${param.args.getOrNull(0)}")
+                                }
+
+                                override fun after(param: HookParam) {
+                                    if (!inLayoutDiagWindow()) return
+                                    HLog.e("$TAG ExtraSpace G AFTER tab=$selectedId " +
+                                        "result=${param.result}")
+                                }
+                            })
+                            HLog.e("$TAG LMLayout hook ExtraSpace G")
+                        }
                         method.name == "V" && method.parameterCount == 2 &&
                             method.parameterTypes[0] == Integer.TYPE &&
                             method.parameterTypes[1] == Integer.TYPE -> {
