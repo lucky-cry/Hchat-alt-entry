@@ -24,6 +24,7 @@ import h.Hchat.hooks.core.HookParam
 import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
+import h.Hchat.hooks.api.core.WeChatApis
 import h.Hchat.hooks.items.conversationgroup.ConversationGroupHomeProjection
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.HLog
@@ -435,6 +436,10 @@ internal object ConversationTabsRuntime {
                             loadedIcons = images
                             compiledFilters = filters
                             if (config.tabs.none { it.id == selectedId }) selectedId = config.tabs.first { it.kind == ConversationTabKind.ALL }.id
+                            val restored = config.tabs.firstOrNull { it.id == selectedId }
+                            if (restored?.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
+                                selectedId = config.tabs.first { it.kind == ConversationTabKind.ALL }.id
+                            }
                             if (config.enabled && !ready) {
                                 HLog.e("$TAG 请求安装标签查询")
                                 DexInstallScheduler.schedule(ConversationTabsFeature.ID, "标签分组", DexInstallScheduler.Stage.BRIDGE) {
@@ -495,6 +500,15 @@ internal object ConversationTabsRuntime {
 
     private fun select(id: String) {
         if (id == selectedId || config.tabs.none { it.id == id }) return
+        val target = config.tabs.first { it.id == id }
+        // 微信首页进入原生空列表后，再切其他分类会留下大块空白。
+        // 未读为空时不要进入这个空态，直接留在“全部”。
+        if (target.kind == ConversationTabKind.UNREAD && unreadCount() == 0) {
+            HLog.e("$TAG 未读为空, 不切换空分类")
+            val all = config.tabs.firstOrNull { it.kind == ConversationTabKind.ALL }
+            if (all != null && all.id != selectedId) select(all.id)
+            return
+        }
         selectedId = id
         publish()
         liveHosts().forEach(::highlight)
@@ -584,6 +598,17 @@ internal object ConversationTabsRuntime {
             }
         }
         return false
+    }
+
+    private fun unreadCount(): Int {
+        return runCatching {
+            WeChatApis.storage()?.queryString(
+                "SELECT COUNT(*) AS c FROM rconversation " +
+                    "WHERE unReadCount > 0 OR unReadMuteCount > 0",
+                null,
+                "c"
+            )?.toIntOrNull() ?: -1
+        }.getOrDefault(-1)
     }
 
     private fun requestRefresh(retries: Int = 0) {
