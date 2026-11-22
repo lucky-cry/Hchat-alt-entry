@@ -485,6 +485,9 @@ internal object ConversationTabsRuntime {
 
     private fun select(id: String) {
         if (id == selectedId || config.tabs.none { it.id == id }) return
+        liveHosts().forEach { host ->
+            logRecyclerLayout("before-switch", host, host.list ?: findConversationList(host.root))
+        }
         selectedId = id
         publish()
         liveHosts().forEach(::highlight)
@@ -496,8 +499,37 @@ internal object ConversationTabsRuntime {
         liveHosts().forEach { host ->
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
+            logRecyclerLayout("refresh-before", host, list)
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
+            logRecyclerLayout("refresh-after", host, list)
+            main.postDelayed({ logRecyclerLayout("refresh-delayed", host, list) }, 350L)
         }
+    }
+
+    private fun logRecyclerLayout(stage: String, host: Host, list: View?) {
+        runCatching {
+            val group = list as? ViewGroup
+            val params = list?.layoutParams as? RelativeLayout.LayoutParams
+            val manager = list?.let { KavaReflector.invokeMethod(it, "getLayoutManager") }
+            val stackFromEnd = manager?.let {
+                KavaReflector.findFieldRecursive(it.javaClass, "mStackFromEnd")
+                    ?.let { field -> KavaReflector.readField(field, it) }
+            }
+            val reverseLayout = manager?.let {
+                KavaReflector.findFieldRecursive(it.javaClass, "mReverseLayout")
+                    ?.let { field -> KavaReflector.readField(field, it) }
+            }
+            val children = if (group == null) "" else (0 until minOf(group.childCount, 3)).joinToString(";") { index ->
+                val child = group.getChildAt(index)
+                "${child.javaClass.simpleName}:top=${child.top},bottom=${child.bottom},h=${child.height},v=${child.visibility}"
+            }
+            HLog.e("$TAG LayoutDiag stage=$stage tab=$selectedId " +
+                "list=${list?.javaClass?.name} h=${list?.height} top=${list?.top} " +
+                "topMargin=${params?.topMargin} paddingTop=${list?.paddingTop} " +
+                "translationY=${list?.translationY} scrollY=${list?.scrollY} " +
+                "childCount=${group?.childCount} stackFromEnd=$stackFromEnd reverseLayout=$reverseLayout " +
+                "children=[$children]")
+        }.onFailure { HLog.e("$TAG LayoutDiag stage=$stage 失败", it) }
     }
 
     private fun requestRefresh(retries: Int = 0) {
