@@ -396,6 +396,37 @@ object ConversationGroupRuntime {
         syncAsync(context)
     }
 
+    /**
+     * 通知微信会话列表重新加载：调用 ConversationStorage 父类的
+     * notifyConversationChanged(event=5)，等价于 wcx 的 reloadConversations。
+     * 不能注入触摸事件，否则会误触会话行。
+     */
+    fun reloadConversationList(): Boolean {
+        val storage = conversationStorage ?: run {
+            HLog.e("$TAG 会话列表刷新跳过: conversationStorage=null")
+            return false
+        }
+        return try {
+            val parent = storage.javaClass.superclass ?: return false
+            val method = parent.declaredMethods.firstOrNull { candidate ->
+                candidate.parameterCount == 3 &&
+                    candidate.parameterTypes[0] == Int::class.javaPrimitiveType &&
+                    candidate.parameterTypes[1].isInstance(storage) &&
+                    candidate.returnType == Void.TYPE
+            } ?: run {
+                HLog.e("$TAG 会话列表刷新方法未找到: ${parent.name}")
+                return false
+            }
+            method.isAccessible = true
+            method.invoke(storage, 5, storage, "")
+            HLog.e("$TAG 会话列表刷新已通知")
+            true
+        } catch (error: Throwable) {
+            HLog.e("$TAG 会话列表刷新失败: ${error.message}", error)
+            false
+        }
+    }
+
     fun syncAsync(context: Context) {
         val appContext = context.applicationContext
         val generation = synchronized(lifecycleLock) {

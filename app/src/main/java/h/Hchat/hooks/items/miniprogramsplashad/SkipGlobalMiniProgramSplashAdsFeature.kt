@@ -10,6 +10,7 @@ import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.HLog
+import h.Hchat.utils.KavaReflector
 import org.luckypray.dexkit.query.FindMethod
 import org.luckypray.dexkit.query.matchers.MethodMatcher
 import java.lang.reflect.Method
@@ -117,7 +118,9 @@ private class SkipGlobalMiniProgramSplashAdsRuntime(
     fun install(): Boolean {
         if (installed) return true
         return runCatching {
-            val method = locateSplashAdCheckMethod() ?: return false
+            // 8.0.80 直接命中广告决策点，避免只依赖日志串定位。
+            installKnownAdDecision()
+            val method = locateSplashAdCheckMethod() ?: return installed
             hookSplashAdCheckMethod(method, context.hostContext())
             installed = true
             true
@@ -125,6 +128,32 @@ private class SkipGlobalMiniProgramSplashAdsRuntime(
             logger("小程序开屏广告 Hook 安装失败", it)
             false
         }
+    }
+
+    private fun installKnownAdDecision() {
+        val clazz = KavaReflector.loadClass(
+            "com.tencent.mm.plugin.appbrand.g7",
+            context.hostClassLoader()
+        ) ?: return
+        val methods = KavaReflector.declaredMethods(clazz).filter {
+            it.name == "N2" && it.returnType == java.lang.Boolean.TYPE
+        }
+        methods.forEach { method ->
+            runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
+                        if (!SkipGlobalMiniProgramSplashAdsFeature.isEnabled(context.hostContext())) {
+                            return
+                        }
+                        param.result = false
+                    }
+                })
+                HLog.e("[Hchat:MiniProgramSplashAds] 已 Hook 小程序广告决策 ${method.toGenericString()}")
+            }.onFailure {
+                logger("Hook 小程序广告决策失败", it)
+            }
+        }
+        if (methods.isNotEmpty()) installed = true
     }
 
     private fun locateSplashAdCheckMethod(): Method? {
