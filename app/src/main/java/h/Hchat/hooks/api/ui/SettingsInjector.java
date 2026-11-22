@@ -866,7 +866,9 @@ public class SettingsInjector {
 
                         param.setResult(null);
                         dismissPlusMenu(param.getThisObject());
+                        h.Hchat.utils.HLog.e(TAG + " [PlusMenu] click itemId=" + itemId);
                         if (itemId == SAFE_MODE_PLUS_MENU_ID) {
+                            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 点击取消模块");
                             Context safeModeContext = findContextFieldValue(param.getThisObject());
                             if (safeModeContext != null) {
                                 SafeMode.INSTANCE.request(safeModeContext);
@@ -1158,6 +1160,12 @@ public class SettingsInjector {
                 PLUGIN_AGENT_PLUS_MENU_TITLE)) {
             return PLUGIN_AGENT_PLUS_MENU_ID;
         }
+        if (isPlusMenuWrapper(
+                wrapper,
+                SAFE_MODE_PLUS_MENU_ID,
+                SAFE_MODE_PLUS_MENU_TITLE)) {
+            return SAFE_MODE_PLUS_MENU_ID;
+        }
         return Integer.MIN_VALUE;
     }
 
@@ -1429,25 +1437,41 @@ public class SettingsInjector {
     private void applyPlusMenuIcon(View rowView, int itemId) {
         if (itemId == QUICK_TERMINATE_PLUS_MENU_ID
                 || itemId == SAFE_MODE_PLUS_MENU_ID) {
-            applyQuickTerminatePowerIcon(rowView);
+            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] apply power icon itemId=" + itemId);
+            applyQuickTerminatePowerIcon(rowView, itemId == SAFE_MODE_PLUS_MENU_ID);
         } else {
             applyHchatPlusMenuIcon(rowView);
         }
     }
 
     private void applyQuickTerminatePowerIcon(View rowView) {
+        applyQuickTerminatePowerIcon(rowView, false);
+    }
+
+    private void applyQuickTerminatePowerIcon(View rowView, boolean safeMode) {
         ImageView imageView = findFirstImageView(rowView);
-        if (imageView == null) return;
+        if (imageView == null) {
+            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 未找到图标 ImageView");
+            return;
+        }
         Drawable icon = rowView.getContext().getDrawable(android.R.drawable.ic_lock_power_off);
-        if (icon == null) return;
-        icon = icon.mutate();
-        icon.setTint(Color.WHITE);
+        if (icon == null) {
+            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 系统电源图标为空, 使用模块图标");
+            icon = new HchatAgentIconDrawable(
+                    Color.WHITE,
+                    HchatAgentIconDrawable.Frame.ROUNDED_RECTANGLE);
+        } else {
+            icon = icon.mutate();
+            icon.setTint(Color.WHITE);
+        }
         imageView.setVisibility(View.VISIBLE);
         imageView.setAlpha(1.0f);
         imageView.setImageDrawable(icon);
         imageView.setImageTintMode(PorterDuff.Mode.SRC_IN);
         imageView.setImageTintList(ColorStateList.valueOf(Color.WHITE));
         imageView.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 图标已设置 safeMode=" + safeMode
+                + " view=" + imageView.getClass().getName());
     }
 
     private ImageView findFirstImageView(View view) {

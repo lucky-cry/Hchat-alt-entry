@@ -473,6 +473,7 @@ import h.Hchat.hooks.items.selectedmessages.SelectedMessagesFeature
 import h.Hchat.hooks.items.selectedmessages.SelectedMessagesRuntimeCoordinator
 import h.Hchat.hooks.items.selectedmessages.SelectedMessagesSettings
 import h.Hchat.hooks.items.settings.PluginAgentEntryProvider
+import h.Hchat.hooks.items.settings.CancelModuleEntryProvider
 import h.Hchat.hooks.items.settings.SettingsEntrySettings
 import h.Hchat.hooks.items.settings.SettingsFeature
 import h.Hchat.hooks.items.shortvideo.FinderMediaDownloadFeature
@@ -3200,6 +3201,7 @@ internal fun practicalFeatureGroups(
             title = "界面",
             providers = practicalProviders.filterByIds(
                 SettingsFeature.ID,
+                CancelModuleEntryProvider.ID,
                 PluginAgentEntryProvider.ID,
                 FloatingShortcutFeature.ID,
                 ProfileIdFeature.ID,
@@ -4650,6 +4652,7 @@ internal fun FeatureSettingsPage(
         RemoveForwardLimitFeature.ID -> RemoveForwardLimitMiuixPage(context, provider, onBack)
         AtAllNotificationBlockFeature.ID -> AtAllNotificationBlockMiuixPage(context, provider, onBack)
         SettingsFeature.ID -> SettingsEntryMiuixPage(context, provider, onBack)
+        CancelModuleEntryProvider.ID -> CancelModuleEntryMiuixPage(context, provider, onBack)
         PluginAgentEntryProvider.ID -> PluginAgentEntryMiuixPage(context, provider, onBack)
         FloatingShortcutFeature.ID -> FloatingShortcutMiuixPage(context, provider, onBack)
         MessageDetailsSettingsProvider.FEATURE_ID -> MessageDetailsConfigPage(
@@ -9740,6 +9743,45 @@ internal fun HideChatMenuMiuixPage(
                         titles = HideChatMenuSettings.DEFAULT_TITLES
                         Toast.makeText(context, "已恢复默认，保存后生效", Toast.LENGTH_SHORT).show()
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CancelModuleEntryMiuixPage(
+    context: Context,
+    provider: FeatureSettingsProvider,
+    onBack: () -> Unit
+) {
+    val sp = remember { HchatStorage.preferences(context, SettingsEntrySettings.PREFS_NAME) }
+    val listState = rememberLazyListState()
+    val scrollBehavior = MiuixScrollBehavior()
+    PageScaffold(
+        title = provider.title(),
+        largeTitle = provider.title(),
+        scrollBehavior = scrollBehavior,
+        bottomBar = { BottomActionBar("返回", onBack) }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+            state = listState,
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding() + 8.dp,
+                bottom = padding.calculateBottomPadding() + 84.dp
+            )
+        ) {
+            item { SmallTitle(text = "加号菜单") }
+            item {
+                SettingsCard {
+                    SwitchRow(
+                        sp,
+                        SettingsEntrySettings.KEY_SAFE_MODE_PLUS_MENU_ENABLE,
+                        "取消模块入口",
+                        "在微信右上角加号菜单显示“取消模块”，重启微信后生效",
+                        SettingsEntrySettings.DEFAULT_SAFE_MODE_PLUS_MENU_ENABLE
+                    )
                 }
             }
         }

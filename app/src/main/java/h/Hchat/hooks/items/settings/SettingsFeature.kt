@@ -23,6 +23,7 @@ class SettingsFeature : Feature {
     override fun onInit(context: FeatureContext) {
         context.uiRegistry().registerProvider(SettingsEntryProvider())
         context.uiRegistry().registerProvider(PluginAgentEntryProvider())
+        context.uiRegistry().registerProvider(CancelModuleEntryProvider())
         context.uiRegistry().registerProvider(CrashReportSettingsProvider())
     }
 
@@ -45,7 +46,8 @@ class SettingsFeature : Feature {
                 entrySettings.plusMenuEnabled() ||
                     entrySettings.pluginAgentPlusMenuEnabled() ||
                     QuickMarkReadRuntime.isPlusMenuEnabled(context.hostContext()) ||
-                    QuickTerminateRuntime.isEnabled(context.hostContext())
+                    QuickTerminateRuntime.isEnabled(context.hostContext()) ||
+                    entrySettings.safeModePlusMenuEnabled()
             )
 
             val injector = SettingsInjector(
@@ -73,6 +75,20 @@ class SettingsEntryProvider : FeatureSettingsProvider {
     override fun subtitle(): String = "控制加号菜单和长按加号入口"
 
     override fun category(): String = FeatureSettingsProvider.CATEGORY_PRACTICAL
+}
+
+class CancelModuleEntryProvider : FeatureSettingsProvider {
+    override fun featureId(): String = SettingsFeature.ID
+
+    override fun title(): String = "取消模块入口"
+
+    override fun subtitle(): String = "控制首页加号菜单中的“取消模块”快捷入口"
+
+    override fun category(): String = FeatureSettingsProvider.CATEGORY_PRACTICAL
+
+    companion object {
+        const val ID = "cancel_module_entry"
+    }
 }
 
 class PluginAgentEntryProvider : FeatureSettingsProvider {
