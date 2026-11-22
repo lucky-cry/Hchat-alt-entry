@@ -69,6 +69,8 @@ internal object ConversationTabsRuntime {
     @Volatile private var ready = false
     private val refresh = Runnable { ConversationGroupHomeProjection.refresh() }
     private val taskBarLayoutListeners = WeakHashMap<View, View.OnLayoutChangeListener>()
+    private val recyclerScrollListeners =
+        WeakHashMap<View, ViewTreeObserver.OnScrollChangedListener>()
 
     private data class Host(
         val root: ViewGroup,
@@ -507,6 +509,39 @@ internal object ConversationTabsRuntime {
         }
     }
 
+    private fun installRecyclerScrollListener(host: Host, list: View?) {
+        // 宿主 ConversationRecyclerView 的 RecyclerView 类来自微信 ClassLoader，
+        // 与模块内 AndroidX 不是同一个类，不能直接 as RecyclerView。
+        // ViewTreeObserver.OnScrollChangedListener 是框架类，可跨 ClassLoader 使用。
+        val recycler = list ?: return
+        if (recyclerScrollListeners.containsKey(recycler)) return
+        val hostType = host.root.javaClass.simpleName
+        val listener = ViewTreeObserver.OnScrollChangedListener {
+            logRecyclerScroll("scroll-changed", hostType, recycler)
+        }
+        recyclerScrollListeners[recycler] = listener
+        recycler.viewTreeObserver.addOnScrollChangedListener(listener)
+        HLog.e("$TAG RecyclerScroll listener-installed host=$hostType")
+    }
+
+    private fun logRecyclerScroll(stage: String, hostType: String, recycler: View) {
+        runCatching {
+            val group = recycler as? ViewGroup
+            val firstChild = group?.getChildAt(0)
+            val firstPosition = KavaReflector.invokeMethod(recycler, "getFirstVisiblePosition")
+            val scrollOffset = KavaReflector.invokeMethod(recycler, "getScrollOffset")
+            HLog.e("$TAG RecyclerScroll stage=$stage tab=$selectedId host=$hostType " +
+                "scrollY=${recycler.scrollY} " +
+                "verticalOffset=${KavaReflector.invokeMethod(recycler, "computeVerticalScrollOffset")} " +
+                "verticalRange=${KavaReflector.invokeMethod(recycler, "computeVerticalScrollRange")} " +
+                "verticalExtent=${KavaReflector.invokeMethod(recycler, "computeVerticalScrollExtent")} " +
+                "firstPosition=$firstPosition scrollOffset=$scrollOffset " +
+                "firstChildTop=${firstChild?.top} " +
+                "firstChildBottom=${firstChild?.bottom} " +
+                "childCount=${group?.childCount}")
+        }.onFailure { HLog.e("$TAG RecyclerScroll stage=$stage 记录失败", it) }
+    }
+
     private fun installTaskBarLayoutListener(host: Host, group: ViewGroup?) {
         val taskBar = group?.let { parent ->
             (0 until parent.childCount)
@@ -561,6 +596,7 @@ internal object ConversationTabsRuntime {
         runCatching {
             val group = list as? ViewGroup
             installTaskBarLayoutListener(host, group)
+            installRecyclerScrollListener(host, list)
             val params = list?.layoutParams as? RelativeLayout.LayoutParams
             val manager = list?.let { KavaReflector.invokeMethod(it, "getLayoutManager") }
             val stackFromEnd = manager?.let {
