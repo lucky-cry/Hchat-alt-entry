@@ -1435,13 +1435,36 @@ public class SettingsInjector {
     }
 
     private void applyPlusMenuIcon(View rowView, int itemId) {
-        if (itemId == QUICK_TERMINATE_PLUS_MENU_ID
-                || itemId == SAFE_MODE_PLUS_MENU_ID) {
+        if (itemId == SAFE_MODE_PLUS_MENU_ID) {
+            h.Hchat.utils.HLog.e(TAG + " [PlusMenu] apply restart icon itemId=" + itemId);
+            applySafeModeRestartIcon(rowView);
+        } else if (itemId == QUICK_TERMINATE_PLUS_MENU_ID) {
             h.Hchat.utils.HLog.e(TAG + " [PlusMenu] apply power icon itemId=" + itemId);
-            applyQuickTerminatePowerIcon(rowView, itemId == SAFE_MODE_PLUS_MENU_ID);
+            applyQuickTerminatePowerIcon(rowView, false);
         } else {
             applyHchatPlusMenuIcon(rowView);
         }
+    }
+
+    private void applySafeModeRestartIcon(View rowView) {
+        ImageView imageView = findFirstImageView(rowView);
+        if (imageView == null) return;
+        Drawable icon = rowView.getContext().getDrawable(android.R.drawable.ic_popup_sync);
+        if (icon == null) {
+            icon = new HchatAgentIconDrawable(
+                    Color.WHITE,
+                    HchatAgentIconDrawable.Frame.ROUNDED_RECTANGLE);
+        } else {
+            icon = icon.mutate();
+            icon.setTint(Color.WHITE);
+        }
+        imageView.setVisibility(View.VISIBLE);
+        imageView.setAlpha(1.0f);
+        imageView.setImageDrawable(icon);
+        imageView.setImageTintMode(PorterDuff.Mode.SRC_IN);
+        imageView.setImageTintList(ColorStateList.valueOf(Color.WHITE));
+        imageView.setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN);
+        h.Hchat.utils.HLog.e(TAG + " [PlusMenu] 重启图标已设置");
     }
 
     private void applyQuickTerminatePowerIcon(View rowView) {
