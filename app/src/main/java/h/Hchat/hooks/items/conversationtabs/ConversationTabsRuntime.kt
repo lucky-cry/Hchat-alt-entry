@@ -542,52 +542,30 @@ internal object ConversationTabsRuntime {
             val list = host.list ?: findConversationList(host.root)
             val adapter = list?.let { KavaReflector.invokeMethod(it, "getAdapter") }
             ConversationGroupHomeProjection.refreshFromAdapter(adapter)
-            // ConversationRecyclerView 不是模块可识别的 RecyclerView，但它有原生
-            // 滚动 API；空分类后用它归零滚动，等价于手动滑一下让列表重排。
+            // 不滚动、不模拟滑动：通过 adapter 重绑 + 强制测量布局，
+            // 让原生列表在空分类后重新排列。
             list?.let { recycler ->
                 runCatching {
-                    KavaReflector.invokeMethod(recycler, "setSelectionWithOffset", 0)
-                    KavaReflector.invokeMethod(recycler, "smoothScrollToPositionFromTop", 0, 0, 0)
-                    HLog.e("$TAG 原生列表滚动归零: offset=${
-                        KavaReflector.invokeMethod(recycler, "getScrollOffset")
-                    }")
+                    val count = KavaReflector.invokeMethod(adapter, "getItemCount") as? Int ?: 0
+                    if (count > 0) {
+                        KavaReflector.invokeMethod(adapter, "notifyItemRangeChanged", 0, count)
+                    }
+                    // 重新挂同一个 adapter，让 RecyclerView 完整重建子项布局；
+                    // 这不是滚动，也不会移动可见列表。
+                    val setAdapter = KavaReflector.declaredMethods(recycler.javaClass)
+                        .firstOrNull { it.name == "setAdapter" && it.parameterCount == 1 }
+                    if (setAdapter != null && adapter != null) {
+                        setAdapter.isAccessible = true
+                        setAdapter.invoke(recycler, null)
+                        setAdapter.invoke(recycler, adapter)
+                    }
+                    recycler.requestLayout()
+                    recycler.invalidate()
+                    (recycler.parent as? View)?.requestLayout()
+                    HLog.e("$TAG 原生列表重新布局: items=$count")
                 }.onFailure {
-                    HLog.e("$TAG 原生列表滚动归零失败: ${it.message}", it)
+                    HLog.e("$TAG 原生列表重新布局失败: ${it.message}", it)
                 }
-            }
-            // 空分类时列表可能停在很大的滚动偏移，切回其他分类会先看到一片空白。
-            (list as? androidx.recyclerview.widget.RecyclerView)?.let { rv ->
-                rv.stopScroll()
-                (rv.layoutManager as? androidx.recyclerview.widget.LinearLayoutManager)?.let { lm ->
-                    // 首页是顶部对齐列表；空态/筛选后若被设成 stackFromEnd，
-                    // 少量行会全部堆在屏幕底部，上方就是大块空白。
-                    lm.stackFromEnd = false
-                    lm.reverseLayout = false
-                }
-                rv.scrollToPosition(0)
-                // 空态/下拉时原生可能留下位移动画，切换分类后仍把列表整体压在屏幕下方。
-                rv.translationY = 0f
-                // 原生空态可能写入异常大的 padding/topMargin，直接归位到标签栏高度。
-                if (rv.paddingTop > rv.height / 2) {
-                    rv.setPadding(rv.paddingLeft, 0, rv.paddingRight, rv.paddingBottom)
-                }
-                (rv.layoutParams as? RelativeLayout.LayoutParams)?.let { params ->
-                    val expected = host.strip.measuredHeight
-                    if (expected > 0 && params.topMargin != expected) {
-                        params.topMargin = expected
-                        rv.layoutParams = params
-                    }
-                }
-                // 原生 adapter 刷新是异步的，刷新后还会重新应用一次旧滚动位置。
-                hideBlankListHeader(rv)
-                main.postDelayed({
-                    rv.stopScroll()
-                    rv.scrollToPosition(0)
-                    rv.layoutManager?.let { lm ->
-                        runCatching { KavaReflector.invokeMethod(lm, "scrollToPositionWithOffset", 0, 0) }
-                    }
-                    hideBlankListHeader(rv)
-                }, 350L)
             }
         }
     }
