@@ -18,6 +18,15 @@
 - 其他微信版本没有逐版验证时，必须明确写“未验证”，不能假设兼容。
 - 本分支只支持 `arm64-v8a` 和 64 位微信进程；新增 native 库只提供 `arm64-v8a`。
 
+## 参考项目
+
+- 重点参考项目：WeKit，https://github.com/Ujhhgtg/WeKit
+  - 功能文档：https://github.com/Ujhhgtg/WeKit/tree/main/docs/features
+  - 本地分析克隆：`D:\github\WeKit`（仅用于阅读/对比，不属于本仓库，不提交其源码）
+- 新增或修改功能前，先检索 WeKit 是否已有同类功能、交互设计和实现思路；优先借鉴其方案，再结合本仓库架构与目标微信版本重新实现。
+- 借鉴时只参考思路，不直接复制未经确认许可证兼容的代码；WeKit 中的混淆类名/字段不能直接套用，必须用 DexSQL / DexKit 在当前目标微信 APK 上重新确认。
+- 已借鉴记录：会话优先级排序参考 WeKit `SuperConversationPinning`，最终采用 Hook 首页 MVVM 会话项 `compareTo` 的方案，而不是排序 Adapter 数据。
+
 ## 开发底线
 
 - 先读取 `git status` 和相关源码，再修改；不要覆盖别人未提交的工作。
