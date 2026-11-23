@@ -22,7 +22,9 @@ object VoiceMessageDurationResolver {
             ?: nativeCandidates.asSequence()
                 .flatMap { nativeContentCandidates(it).asSequence() }
                 .firstNotNullOfOrNull { voiceDurationFromContent(it, fileName) }
-            ?: WeChatApis.media()?.voices()?.storedDurationMillis(fileName)?.takeIf { it > 0 }
+            ?: WeChatApis.media()?.voices()?.storedDurationMillis(fileName)
+                ?.let { normalizeVoiceDurationMillis(it.toLong()) }
+                ?.takeIf { it > 0 }
         return duration?.also { cacheDuration(fileName, msgId, it) }
             ?: defaultDurationMillis
     }

@@ -111,8 +111,7 @@ public final class WeChatVoiceApi {
             log("发送语音失败: 文件不存在 " + voicePath);
             return false;
         }
-        if (!canSendSilently()) {
-            log("发送语音失败: API未就绪");
+        if (!ensureSendReady()) {
             return false;
         }
         PreparedVoice prepared = prepareVoiceSource(rawSource);
@@ -125,6 +124,21 @@ public final class WeChatVoiceApi {
         } finally {
             prepared.deleteTemp();
         }
+    }
+
+    private boolean ensureSendReady() {
+        if (canSendSilently()) return true;
+        if (dexFinder != null) {
+            dexFinder.resolveServiceManagerApi();
+            dexFinder.resolveSendVoiceApi();
+        }
+        if (canSendSilently()) return true;
+        String detail = "发送语音失败: API未就绪"
+                + " fullPath=" + (dexFinder != null && dexFinder.voiceFullPathMethod != null)
+                + " finish=" + (dexFinder != null && dexFinder.voiceFinishRecordMethod != null)
+                + " upload=" + (dexFinder != null && dexFinder.voiceUploadClass != null);
+        log(detail);
+        return false;
     }
 
     public MassSendPayload prepareMassSendPayload(String voicePath, int durationMillis) {
@@ -267,15 +281,15 @@ public final class WeChatVoiceApi {
     /** Resolve a downloaded voice using its native message, including WeChat's new file storage. */
     public String resolvePath(Object nativeMessage, String fileName) {
         Method method = dexFinder != null ? dexFinder.voiceMessagePathMethod : null;
+        String nativePath = "";
         if (nativeMessage != null && method != null
                 && method.getParameterTypes()[0].isInstance(nativeMessage)) {
             try {
                 Object target = voicePathTarget(method);
                 if (target != null) {
                     Object value = KavaReflector.invokeOrThrow(method, target, nativeMessage, fileName, false);
-                    if (value instanceof String && !TextUtils.isEmpty((String) value)
-                            && new File((String) value).isFile()) {
-                        return (String) value;
+                    if (value instanceof String) {
+                        nativePath = (String) value;
                     }
                 }
             } catch (Throwable error) {
@@ -283,8 +297,17 @@ public final class WeChatVoiceApi {
             }
         }
         String fallback = resolvePath(fileName);
-        if (!TextUtils.isEmpty(fallback) && new File(fallback).isFile()) return fallback;
-        return resolvePathByMessageId(nativeMessage, fileName);
+        log("语音路径解析: method=" + (method == null ? "null" : method.getName())
+                + " msgId=" + messageId(nativeMessage)
+                + " fileName=" + fileName
+                + " nativePath=" + nativePath + " fullPath=" + fallback);
+        if (!TextUtils.isEmpty(fallback) && new File(fallback).isFile()) {
+            log("语音路径命中: " + fallback);
+            return fallback;
+        }
+        String result = resolvePathByMessageId(nativeMessage, fileName);
+        log("语音路径回退结果: " + result);
+        return result;
     }
 
     /**
@@ -293,19 +316,29 @@ public final class WeChatVoiceApi {
      */
     private String resolvePathByMessageId(Object nativeMessage, String fileName) {
         long msgId = messageId(nativeMessage);
+        List<File> dirs = voiceDirectories();
+        log("语音回退查找: msgId=" + msgId + " fileName=" + fileName + " dirs=" + dirs.size());
         if (msgId <= 0L && TextUtils.isEmpty(fileName)) return "";
-        for (File voiceDir : voiceDirectories()) {
+        for (File voiceDir : dirs) {
             if (!TextUtils.isEmpty(fileName)) {
                 File direct = new File(voiceDir, fileName);
                 if (direct.isFile()) return direct.getAbsolutePath();
             }
             if (msgId > 0L) {
                 File found = findVoiceFile(voiceDir, "msg_" + msgId);
-                if (found != null) return found.getAbsolutePath();
+                if (found != null) {
+                    log("语音回退命中: " + found.getAbsolutePath());
+                    return found.getAbsolutePath();
+                }
             }
             if (!TextUtils.isEmpty(fileName)) {
-                File found = findVoiceFile(voiceDir, fileName);
-                if (found != null) return found.getAbsolutePath();
+                for (String prefix : new String[]{"msg_" + fileName, fileName}) {
+                    File found = findVoiceFile(voiceDir, prefix);
+                    if (found != null) {
+                        log("语音回退按文件名命中: " + found.getAbsolutePath());
+                        return found.getAbsolutePath();
+                    }
+                }
             }
         }
         log("语音路径回退查找失败: msgId=" + msgId + " fileName=" + fileName);
@@ -632,7 +665,12 @@ public final class WeChatVoiceApi {
 
     private Object voicePathTarget(Method method) {
         if (method == null || KavaReflector.isStatic(method)) return null;
-        return WeChatInternalServices.getService(dexFinder, method.getDeclaringClass());
+        Object service = WeChatInternalServices.getService(dexFinder, method.getDeclaringClass());
+        if (service == null && dexFinder != null) {
+            dexFinder.resolveServiceManagerApi();
+            service = WeChatInternalServices.getService(dexFinder, method.getDeclaringClass());
+        }
+        return service;
     }
 
     private boolean finishRecord(String fileName, int durationMillis, int scene) throws Exception {
@@ -899,6 +937,11 @@ public final class WeChatVoiceApi {
             } catch (Throwable ignored) {
             }
         }
+    }
+
+    /** Measures the real audio duration from a voice file (Silk/AMR/MP3/...). */
+    public int durationMillis(String path) {
+        return detectDurationMillis(path);
     }
 
     private int detectDurationMillis(String path) {

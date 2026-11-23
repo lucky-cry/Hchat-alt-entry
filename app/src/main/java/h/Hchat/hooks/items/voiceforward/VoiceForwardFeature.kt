@@ -1464,13 +1464,16 @@ private class VoiceForwardHooker(
             storedMessage?.bodyContent()?.takeIf { it.isNotBlank() }?.let(::add)
             storedMessage?.content?.takeIf { it.isNotBlank() }?.let(::add)
         }
-        return VoiceMessageDurationResolver.resolve(
+        val resolved = VoiceMessageDurationResolver.resolve(
             message,
             fileName,
             msgId,
             contentCandidates,
             DEFAULT_VOICE_DURATION_MS
         )
+        if (resolved > 0 && resolved != DEFAULT_VOICE_DURATION_MS) return resolved
+        val path = WeChatApis.media()?.voices()?.resolvePath(message, fileName).orEmpty()
+        return WeChatApis.media()?.voices()?.durationMillis(path)?.takeIf { it > 0 } ?: resolved
     }
 
     private fun normalizeVoiceDurationMillis(raw: Long?): Int? {

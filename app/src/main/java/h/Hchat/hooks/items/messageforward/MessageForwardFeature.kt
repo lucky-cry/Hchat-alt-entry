@@ -1,6 +1,8 @@
 package h.Hchat.hooks.items.messageforward
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -40,6 +42,7 @@ import h.Hchat.hooks.items.scheduledtask.ScheduledTaskSettings
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.ui.miuix.VoiceForwardMiuixDialog
 import h.Hchat.utils.KavaReflector
+import h.Hchat.utils.HLog
 import java.io.File
 import java.lang.ref.WeakReference
 import java.lang.reflect.Method
@@ -224,7 +227,11 @@ private class MessageForwardHooker(
         val nativeMessage = resolveNativeMessage(view.tag) ?: return
         if (nativeMessageType(nativeMessage) == null) return
         val item = addMenuItem(menu, view, readMenuGroupId(menu)) ?: return
-        val binding = MessageBinding(nativeMessage)
+        val binding = MessageBinding(
+            nativeMessage,
+            findActivity(view.context)?.let(::WeakReference),
+            WeakReference(view)
+        )
         bindingsByItem[item] = binding
         bindingsByGroup[item.groupId] = binding
         moveAfterRepeat(menu, item)
@@ -236,6 +243,8 @@ private class MessageForwardHooker(
         if (item.itemId != SingleMessageMenuLocator.HCHAT_FORWARD_MENU_ITEM_ID) return
         val binding = consumeBinding(item)
         val activity = currentActivity()
+            ?: binding?.activity?.get()
+            ?: binding?.view?.get()?.let { findActivity(it.context) }
         if (binding == null || activity == null) {
             toast(activity, "消息不可转发")
             return
@@ -246,6 +255,10 @@ private class MessageForwardHooker(
             toast(activity, "无法读取该消息")
             return
         }
+        HLog.e("Hchat:MessageForward 语音转发: msgId=${snapshot.msgId} type=${snapshot.type} " +
+            "voicePath=${snapshot.voicePath} exists=${File(snapshot.voicePath).isFile} " +
+            "fileName=${snapshot.voiceFileName} durationMs=${snapshot.voiceDurationMillis} " +
+            "retransmit=${snapshot.retransmit != null}")
         main.post {
             if (!activity.isFinishing && !activity.isDestroyed) {
                 showActions(activity, snapshot)
@@ -257,7 +270,10 @@ private class MessageForwardHooker(
         if (!multiMomentsEnabled()) return
         val selected = MultiSelectMessageResolver.resolve(param.thisObject)
         val types = selected.mapNotNull(::nativeMessageType)
-        if (selected.isEmpty() || types.size != selected.size || momentsCombinationError(types) != null) return
+        if (selected.isEmpty() || types.size != selected.size ||
+            types.any { WeChatMessageTypes.normalize(it) == WeChatMessageTypes.VOICE } ||
+            momentsCombinationError(types) != null
+        ) return
         val menu = param.args?.getOrNull(0) ?: return
         addPlainMenuItem(menu, MULTI_MOMENTS_MENU_ITEM_ID, MULTI_MOMENTS_MENU_TITLE)
     }
@@ -825,41 +841,45 @@ private class MessageForwardHooker(
 
     private fun showActions(activity: Activity, snapshot: SelectedMessageSnapshot) {
         val supportsGeneralForwarding = snapshot.retransmit != null || File(snapshot.voicePath).isFile
-        val choices = if (supportsGeneralForwarding) {
-            listOf(
-                "转发到朋友圈" to "",
-                "转发给好友" to "",
-                "转发至分组" to "",
-                "分享" to "",
-                "群发助手" to "",
-                "转发至标签" to ""
-            )
-        } else {
-            listOf("转发到朋友圈" to "")
+        val choices = ArrayList<Pair<String, String>>()
+        val actions = ArrayList<() -> Unit>()
+        // 微信朋友圈不支持语音播放，不能让用户误以为可以转发语音。
+        if (!WeChatMessageTypes.isVoice(snapshot.type)) {
+            choices += "转发到朋友圈" to ""
+            actions += { forwardToMoments(activity, snapshot) }
+        }
+        if (supportsGeneralForwarding) {
+            choices += "转发给好友" to ""
+            actions += { chooseDirectTargets(activity, snapshot) }
+            choices += "转发至分组" to ""
+            actions += {
+                chooseConversationGroupTargets(activity) { targetIds ->
+                    sendSnapshots(
+                        activity = activity,
+                        snapshot = snapshot,
+                        targetIds = targetIds,
+                        channel = SelectedMessagesRuntimeCoordinator.CHANNEL_MODULE,
+                        title = "转发至分组"
+                    )
+                }
+            }
+            choices += "分享" to ""
+            actions += { systemShare.share(activity, snapshot)?.let { toast(activity, it) } }
+            choices += "群发助手" to ""
+            actions += { chooseMassSendChannel(activity, snapshot) }
+            choices += "转发至标签" to ""
+            actions += { chooseLabels(activity, snapshot) }
+        }
+        if (choices.isEmpty()) {
+            toast(activity, "该语音消息暂不支持转发")
+            return
         }
         VoiceForwardMiuixDialog.showChoices(
             activity = activity,
             title = MENU_TITLE,
             summary = "",
             choices = choices,
-            onSelected = { index ->
-                when (index) {
-                    0 -> forwardToMoments(activity, snapshot)
-                    1 -> chooseDirectTargets(activity, snapshot)
-                    2 -> chooseConversationGroupTargets(activity) { targetIds ->
-                        sendSnapshots(
-                            activity = activity,
-                            snapshot = snapshot,
-                            targetIds = targetIds,
-                            channel = SelectedMessagesRuntimeCoordinator.CHANNEL_MODULE,
-                            title = "转发至分组"
-                        )
-                    }
-                    3 -> systemShare.share(activity, snapshot)?.let { toast(activity, it) }
-                    4 -> chooseMassSendChannel(activity, snapshot)
-                    5 -> chooseLabels(activity, snapshot)
-                }
-            },
+            onSelected = { index -> actions.getOrNull(index)?.invoke() },
             onDismiss = {}
         )
     }
@@ -973,6 +993,7 @@ private class MessageForwardHooker(
 
     private fun momentsCombinationError(types: List<Int>): String? {
         if (types.isEmpty()) return "未找到选中的消息"
+        if (types.any { it == WeChatMessageTypes.VOICE }) return "朋友圈不支持转发语音消息"
         val imageCount = types.count { it == WeChatMessageTypes.IMAGE }
         val videoCount = types.count { it in MOMENTS_VIDEO_TYPES }
         if (imageCount > MAX_MOMENTS_IMAGES) return "朋友圈最多选择 $MAX_MOMENTS_IMAGES 张图片"
@@ -1585,6 +1606,15 @@ private class MessageForwardHooker(
         bindingsByGroup.clear()
     }
 
+    private fun findActivity(context: Context?): Activity? {
+        var current = context
+        while (current is ContextWrapper) {
+            if (current is Activity) return current
+            current = current.baseContext
+        }
+        return current as? Activity
+    }
+
     private fun currentActivity(): Activity? {
         return (WeChatApis.currentActivity()?.currentActivity() as? Activity)
             ?.takeUnless { it.isFinishing || it.isDestroyed }
@@ -1613,7 +1643,11 @@ private class MessageForwardHooker(
         )
     }
 
-    private data class MessageBinding(val nativeMessage: Any)
+    private data class MessageBinding(
+        val nativeMessage: Any,
+        val activity: WeakReference<Activity>? = null,
+        val view: WeakReference<View>? = null
+    )
 
     private data class MomentsPreparation(
         val intent: Intent? = null,

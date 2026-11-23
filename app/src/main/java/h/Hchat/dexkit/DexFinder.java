@@ -801,7 +801,8 @@ public class DexFinder {
 
     // ============ 文本消息发送 ============
     public void resolveServiceManagerApi() {
-        if (ensureSnapshotLoaded()) return;
+        boolean loaded = ensureSnapshotLoaded();
+        if (loaded && isServiceGetterMethod(serviceGetterMethod)) return;
         try {
             if (isServiceGetterMethod(serviceGetterMethod)) return;
             List<MethodData> methods = dexKit.findMethod(
@@ -1709,7 +1710,12 @@ public class DexFinder {
     }
 
     public void resolveSendVoiceApi() {
-        if (ensureSnapshotLoaded()) return;
+        boolean loaded = ensureSnapshotLoaded();
+        if (loaded
+                && voiceStartRecordMethod != null
+                && voiceFullPathMethod != null
+                && voiceFinishRecordMethod != null
+                && voiceUploadClass != null) return;
         try {
             if (voiceStartRecordMethod == null) {
                 List<MethodData> methods = dexKit.findMethod(

@@ -501,6 +501,9 @@ import h.Hchat.ui.UIRegistry
 import h.Hchat.utils.KavaReflector
 import h.Hchat.utils.KeywordReplacementRule
 
+import android.text.Html
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
@@ -7527,8 +7530,10 @@ internal fun AboutCard(context: Context) {
     var updateInfo by remember { mutableStateOf<ModuleUpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var updateError by remember { mutableStateOf("") }
-    // 历史版本统一跳转到本项目自己的 Release 页面，更新说明和下载都在该页面查看。
-    val historyUrl = "https://github.com/lucky-cry/Hchat-alt-entry/releases"
+    var historyVersions by remember { mutableStateOf<List<ModuleVersionHistory>>(emptyList()) }
+    var historyLoading by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf("") }
+    var showHistoryDialog by remember { mutableStateOf(false) }
     val updatePrefs = remember { HchatStorage.preferences(context, MODULE_UPDATE_PREFS) }
     val checkForUpdate: () -> Unit = {
         updateError = "正在检查更新…"
@@ -7557,8 +7562,18 @@ internal fun AboutCard(context: Context) {
         }
     }
     val openHistory: () -> Unit = {
-        runCatching {
-            activity?.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(historyUrl)))
+        showHistoryDialog = true
+        if (historyVersions.isEmpty() && !historyLoading) {
+            historyLoading = true
+            historyError = ""
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { loadGithubModuleHistory() }
+                }
+                historyLoading = false
+                result.onSuccess { historyVersions = it }
+                    .onFailure { historyError = "加载历史版本失败：${it.message ?: "网络不可用"}" }
+            }
         }
     }
     SettingsCard {
@@ -7611,6 +7626,112 @@ internal fun AboutCard(context: Context) {
             )
         }
     }
+    if (showHistoryDialog) {
+        WindowDialog(
+            show = true,
+            title = "历史版本",
+            onDismissRequest = { showHistoryDialog = false },
+            content = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    when {
+                        historyLoading -> Text(
+                            "正在加载历史版本…",
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                        historyError.isNotBlank() -> {
+                            Text(
+                                historyError,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                            TextButton("重试", onClick = {
+                                historyLoading = true
+                                historyError = ""
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching { loadGithubModuleHistory() }
+                                    }
+                                    historyLoading = false
+                                    result.onSuccess { historyVersions = it }
+                                        .onFailure { historyError = "加载历史版本失败：${it.message ?: "网络不可用"}" }
+                                }
+                            }, colors = ButtonDefaults.textButtonColorsPrimary())
+                        }
+                        historyVersions.isEmpty() -> Text(
+                            "暂无历史版本",
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                        else -> historyVersions.forEach { version ->
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        buildString {
+                                            append(version.versionName)
+                                            when {
+                                                version.versionCode > 0 -> append("（${version.versionCode}）")
+                                                version.publishedAt.isNotBlank() ->
+                                                    append("（${version.publishedAt.take(10)}）")
+                                            }
+                                            if (version.versionName == BuildConfig.VERSION_NAME) append("  当前版本")
+                                        },
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                    if (version.size > 0) {
+                                        Text(
+                                            formatFileSize(version.size),
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                                Text(
+                                    version.releaseNotes.ifBlank { "无更新说明" },
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 5.dp)
+                                )
+                                TextButton(
+                                    "下载此版本",
+                                    onClick = {
+                                        if (version.downloadUrl.isNotBlank()) {
+                                            activity?.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(version.downloadUrl))
+                                            )
+                                        }
+                                    },
+                                    colors = ButtonDefaults.textButtonColorsPrimary()
+                                )
+                            }
+                            InsetDivider()
+                        }
+                    }
+                    TextButton("在浏览器打开全部版本", onClick = {
+                        activity?.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/lucky-cry/Hchat-alt-entry/releases")
+                            )
+                        )
+                    }, colors = ButtonDefaults.textButtonColorsPrimary())
+                }
+            }
+        )
+    }
 }
 @Composable
 internal fun ModuleUpdateDialog(
@@ -7642,12 +7763,151 @@ internal fun ModuleUpdateDialog(
     )
 }
 
+private val moduleHistoryHttp by lazy {
+    OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+}
+
+private fun normalizeReleaseNotes(raw: String): String {
+    if (raw.isBlank()) return ""
+    // Releases API 返回 Markdown；Releases Atom 返回被转义的 HTML。
+    var text = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
+    if (text.contains("<li", ignoreCase = true)) {
+        text = text
+            .replace(Regex("(?i)<li[^>]*>"), "• ")
+            .replace(Regex("(?i)</li>"), "\n")
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</(p|div|ul|ol|h[1-6])>"), "\n")
+            .replace(Regex("(?i)<[^>]+>"), "")
+    }
+    text = Html.fromHtml(text, Html.FROM_HTML_MODE_LEGACY).toString()
+    return text.lines()
+        .map { line ->
+            when {
+                line.trimStart().startsWith("- ") -> "• " + line.trimStart().removePrefix("- ")
+                else -> line
+            }.trimEnd()
+        }
+        .joinToString("\n")
+        .replace(Regex("\n{3,}"), "\n\n")
+        .trim()
+}
+
+/** Reads the project's public GitHub Releases as the single history source. */
+private fun loadGithubModuleHistory(): List<ModuleVersionHistory> {
+    val apiError = runCatching { loadGithubReleasesApi() }
+    apiError.getOrNull()?.let { return it }
+    // api.github.com 在部分网络环境下会直接返回 403；Releases Atom 公共源无需 API 配额。
+    return runCatching { loadGithubReleasesAtom() }.getOrElse { atomError ->
+        throw IllegalStateException(
+            "${apiError.exceptionOrNull()?.message ?: "GitHub API 不可用"}；" +
+                "备用 Releases 源失败：${atomError.message ?: "网络不可用"}"
+        )
+    }
+}
+
+private fun loadGithubReleasesApi(): List<ModuleVersionHistory> {
+    val payload = githubReleasesRequest(
+        "https://api.github.com/repos/lucky-cry/Hchat-alt-entry/releases?per_page=30",
+        "application/vnd.github+json"
+    )
+    val releases = JSONArray(payload)
+    return buildList {
+        for (index in 0 until releases.length()) {
+            val release = releases.optJSONObject(index) ?: continue
+            val tag = release.optString("tag_name").ifBlank { release.optString("name") }
+            val versionName = tag.removePrefix("v").ifBlank { release.optString("name") }
+            val assets = release.optJSONArray("assets")
+            var size = 0L
+            var downloadUrl = ""
+            if (assets != null) {
+                for (assetIndex in 0 until assets.length()) {
+                    val asset = assets.optJSONObject(assetIndex) ?: continue
+                    if (!asset.optString("name").endsWith(".apk", ignoreCase = true)) continue
+                    size = asset.optLong("size")
+                    downloadUrl = asset.optString("browser_download_url")
+                    break
+                }
+            }
+            if (downloadUrl.isBlank()) downloadUrl = release.optString("html_url")
+            add(
+                ModuleVersionHistory(
+                    versionName = versionName,
+                    versionCode = 0,
+                    releaseNotes = normalizeReleaseNotes(release.optString("body")),
+                    size = size,
+                    downloadUrl = downloadUrl,
+                    publishedAt = release.optString("published_at")
+                )
+            )
+        }
+    }
+}
+
+private fun loadGithubReleasesAtom(): List<ModuleVersionHistory> {
+    val xml = githubReleasesRequest(
+        "https://github.com/lucky-cry/Hchat-alt-entry/releases.atom",
+        "application/atom+xml"
+    )
+    val entryRegex = Regex("<entry>(.*?)</entry>", setOf(RegexOption.DOT_MATCHES_ALL))
+    val titleRegex = Regex("<title>(.*?)</title>", setOf(RegexOption.DOT_MATCHES_ALL))
+    val linkRegex = Regex("<link[^>]*href=\"([^\"]+)\"")
+    val updatedRegex = Regex("<updated>(.*?)</updated>", setOf(RegexOption.DOT_MATCHES_ALL))
+    val contentRegex = Regex("<content[^>]*>(.*?)</content>", setOf(RegexOption.DOT_MATCHES_ALL))
+    return buildList {
+        for (entryMatch in entryRegex.findAll(xml)) {
+            val entry = entryMatch.groupValues[1]
+            val title = titleRegex.find(entry)?.groupValues?.get(1)?.trim().orEmpty()
+            val pageUrl = linkRegex.find(entry)?.groupValues?.get(1).orEmpty()
+            val tag = pageUrl.substringAfterLast('/').ifBlank { "v$title" }
+            val versionName = tag.removePrefix("v").ifBlank { title }
+            val notes = contentRegex.find(entry)?.groupValues?.get(1)
+                ?.let(::normalizeReleaseNotes)
+                .orEmpty()
+            val publishedAt = updatedRegex.find(entry)?.groupValues?.get(1)?.trim().orEmpty()
+            add(
+                ModuleVersionHistory(
+                    versionName = versionName,
+                    versionCode = 0,
+                    releaseNotes = notes,
+                    size = 0L,
+                    downloadUrl = pageUrl.ifBlank { githubReleaseApkUrl(tag, pageUrl) },
+                    publishedAt = publishedAt
+                )
+            )
+        }
+    }
+}
+
+private fun githubReleaseApkUrl(tag: String, releasePageUrl: String): String {
+    if (tag.isNotBlank()) {
+        return "https://github.com/lucky-cry/Hchat-alt-entry/releases/download/" +
+            "$tag/Hchat-release-signed.apk"
+    }
+    return releasePageUrl
+}
+
+private fun githubReleasesRequest(url: String, accept: String): String {
+    val request = Request.Builder()
+        .url(url)
+        .header("Accept", accept)
+        .header("User-Agent", "Hchat-Module")
+        .build()
+    return moduleHistoryHttp.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) error("GitHub HTTP ${response.code}")
+        response.body?.string().orEmpty()
+    }
+}
+
 internal data class ModuleVersionHistory(
     val versionName: String,
     val versionCode: Int,
     val releaseNotes: String,
     val size: Long,
-    val downloadUrl: String
+    val downloadUrl: String,
+    val publishedAt: String = ""
 ) {
     companion object {
         fun fromJson(value: JSONObject, baseUrl: String): ModuleVersionHistory = ModuleVersionHistory(
@@ -7660,8 +7920,7 @@ internal data class ModuleVersionHistory(
     }
 }
 
-internal fun formatFileSize(size: Long): String = when {
-    size >= 1024 * 1024 -> String.format("%.1f MiB", size / (1024.0 * 1024.0))
+internal fun formatFileSize(size: Long): String = when {    size >= 1024 * 1024 -> String.format("%.1f MiB", size / (1024.0 * 1024.0))
     size >= 1024 -> String.format("%.1f KiB", size / 1024.0)
     else -> "$size B"
 }

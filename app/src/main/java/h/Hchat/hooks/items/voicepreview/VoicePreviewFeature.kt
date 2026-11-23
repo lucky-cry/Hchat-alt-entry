@@ -1,6 +1,8 @@
 package h.Hchat.hooks.items.voicepreview
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
 import android.view.MenuItem
@@ -21,7 +23,9 @@ import h.Hchat.media.AudioTransformBridge
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.ui.miuix.VoiceForwardMiuixDialog
 import h.Hchat.utils.KavaReflector
+import h.Hchat.utils.HLog
 import java.io.File
+import java.lang.ref.WeakReference
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.util.Collections
@@ -71,7 +75,12 @@ private class VoicePreviewRuntime(
     private val context: FeatureContext,
     private val logger: (String, Throwable?) -> Unit
 ) {
-    private data class MenuMessageBinding(val msgId: Long, val nativeMessage: Any)
+    private data class MenuMessageBinding(
+        val msgId: Long,
+        val nativeMessage: Any,
+        val activity: WeakReference<Activity>? = null,
+        val view: WeakReference<View>? = null
+    )
 
     private val prefs = HchatStorage.preferences(context.hostContext(), VoicePreviewSettings.PREFS_NAME)
     private val main = Handler(Looper.getMainLooper())
@@ -144,7 +153,12 @@ private class VoicePreviewRuntime(
         val message = resolveNativeMessage(view.tag) ?: return
         if (!isVoiceMessage(message)) return
         val item = addMenuItem(menu, view) ?: return
-        val binding = MenuMessageBinding(messageId(message), message)
+        val binding = MenuMessageBinding(
+            messageId(message),
+            message,
+            findActivity(view.context)?.let(::WeakReference),
+            WeakReference(view)
+        )
         if (binding.msgId <= 0L) return
         messagesByMenuItem[item] = binding
         messagesByMenuGroup[item.groupId] = binding
@@ -154,8 +168,12 @@ private class VoicePreviewRuntime(
         if (!enabled()) return
         val item = param.args?.firstNotNullOfOrNull { it as? MenuItem } ?: return
         if (item.itemId != MENU_ITEM_ID) return
-        val activity = WeChatApis.currentActivity()?.currentActivity()
         val binding = consumeMenuMessageBinding(item)
+        val activity = WeChatApis.currentActivity()?.currentActivity()
+            ?: binding?.activity?.get()
+            ?: binding?.view?.get()?.let { findActivity(it.context) }
+        HLog.e("Hchat:VoicePreview 点击预览: item=${item.itemId} activity=${activity != null} " +
+            "binding=${binding != null} msgId=${binding?.msgId}")
         if (activity == null || binding == null) {
             toast(activity, "语音消息不可用")
             return
@@ -169,6 +187,10 @@ private class VoicePreviewRuntime(
 
     private fun showPreview(activity: Activity, message: Any) {
         val snapshot = SelectedMessageSnapshot.fromNative(message)
+        HLog.e("Hchat:VoicePreview 展示: message=${message.javaClass.name} " +
+            "snapshot=${snapshot != null} type=${snapshot?.type} " +
+            "path=${snapshot?.voicePath} exists=${snapshot?.voicePath?.let { File(it).isFile }} " +
+            "fileName=${snapshot?.voiceFileName}")
         if (snapshot == null || !WeChatMessageTypes.isVoice(snapshot.type)) {
             toast(activity, "语音文件不存在或尚未下载")
             return
@@ -370,8 +392,16 @@ private class VoicePreviewRuntime(
         return 0
     }
 
-    private fun readNumber(source: Any, getter: String, field: String, fallback: String): Number? {
-        return KavaReflector.invokeMethod(source, getter) as? Number
+    private fun findActivity(context: Context?): Activity? {
+        var current = context
+        while (current is ContextWrapper) {
+            if (current is Activity) return current
+            current = current.baseContext
+        }
+        return current as? Activity
+    }
+
+    private fun readNumber(source: Any, getter: String, field: String, fallback: String): Number? {        return KavaReflector.invokeMethod(source, getter) as? Number
             ?: KavaReflector.readField(source, field) as? Number
             ?: KavaReflector.readField(source, fallback) as? Number
     }
