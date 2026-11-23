@@ -23,7 +23,11 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -278,7 +282,95 @@ public final class WeChatVoiceApi {
                 logReflectionFailure("解析语音消息路径", method, error);
             }
         }
-        return resolvePath(fileName);
+        String fallback = resolvePath(fileName);
+        if (!TextUtils.isEmpty(fallback) && new File(fallback).isFile()) return fallback;
+        return resolvePathByMessageId(nativeMessage, fileName);
+    }
+
+    /**
+     * WeChat 8.0.80 may store received voices as {@code voice2/<xx>/<yy>/msg_<msgId>_m.amr}
+     * and no longer return them through the native path service. Search by msgId as a fallback.
+     */
+    private String resolvePathByMessageId(Object nativeMessage, String fileName) {
+        long msgId = messageId(nativeMessage);
+        if (msgId <= 0L && TextUtils.isEmpty(fileName)) return "";
+        for (File voiceDir : voiceDirectories()) {
+            if (!TextUtils.isEmpty(fileName)) {
+                File direct = new File(voiceDir, fileName);
+                if (direct.isFile()) return direct.getAbsolutePath();
+            }
+            if (msgId > 0L) {
+                File found = findVoiceFile(voiceDir, "msg_" + msgId);
+                if (found != null) return found.getAbsolutePath();
+            }
+            if (!TextUtils.isEmpty(fileName)) {
+                File found = findVoiceFile(voiceDir, fileName);
+                if (found != null) return found.getAbsolutePath();
+            }
+        }
+        log("语音路径回退查找失败: msgId=" + msgId + " fileName=" + fileName);
+        return "";
+    }
+
+    private List<File> voiceDirectories() {
+        List<File> result = new ArrayList<>();
+        try {
+            File dataDir = hostContext.getFilesDir() != null
+                    ? hostContext.getFilesDir().getParentFile() : null;
+            File microMsg = dataDir != null ? new File(dataDir, "MicroMsg") : null;
+            File[] accounts = microMsg != null ? microMsg.listFiles() : null;
+            if (accounts == null) return result;
+            for (File account : accounts) {
+                File voice2 = new File(account, "voice2");
+                if (voice2.isDirectory()) result.add(voice2);
+            }
+        } catch (Throwable error) {
+            log("枚举语音目录失败: " + error.getMessage());
+        }
+        return result;
+    }
+
+    private File findVoiceFile(File root, String namePrefix) {
+        if (root == null || TextUtils.isEmpty(namePrefix)) return null;
+        ArrayDeque<File> queue = new ArrayDeque<>();
+        queue.add(root);
+        int visited = 0;
+        while (!queue.isEmpty() && visited < 20000) {
+            File dir = queue.removeFirst();
+            File[] children = dir.listFiles();
+            if (children == null) continue;
+            for (File child : children) {
+                visited++;
+                if (child.isDirectory()) {
+                    queue.addLast(child);
+                    continue;
+                }
+                String name = child.getName();
+                if (name.startsWith(namePrefix) && isVoiceFileName(name)) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isVoiceFileName(String name) {
+        String lower = name.toLowerCase(Locale.US);
+        return lower.endsWith(".amr") || lower.endsWith(".silk") || lower.endsWith(".slk")
+                || lower.endsWith(".mp3") || lower.endsWith(".spx");
+    }
+
+    private long messageId(Object nativeMessage) {
+        if (nativeMessage == null) return 0L;
+        for (String name : new String[]{"getMsgId", "getMsgID"}) {
+            Object value = KavaReflector.invokeMethod(nativeMessage, name);
+            if (value instanceof Number) return ((Number) value).longValue();
+        }
+        for (String name : new String[]{"field_msgId", "msgId", "msgID", "id"}) {
+            Object value = KavaReflector.readField(nativeMessage, name);
+            if (value instanceof Number) return ((Number) value).longValue();
+        }
+        return 0L;
     }
 
     public int storedDurationMillis(String fileName) {
