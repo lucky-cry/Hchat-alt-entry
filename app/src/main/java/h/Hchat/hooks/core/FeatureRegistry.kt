@@ -11,6 +11,7 @@ import h.Hchat.hooks.items.autovieworiginal.AutoViewOriginalFeature
 import h.Hchat.hooks.items.callmedialimit.CallMediaLimitFeature
 import h.Hchat.hooks.items.callmedialimit.CallRingtoneBlockFeature
 import h.Hchat.hooks.items.chattime.ChatTimeStyleFeature
+import h.Hchat.hooks.items.conversationpriority.ConversationPriorityFeature
 import h.Hchat.hooks.items.conversationgroup.ConversationGroupFeature
 import h.Hchat.hooks.items.conversationtabs.ConversationTabsFeature
 import h.Hchat.hooks.items.custombottombar.CustomBottomBarFeature
@@ -130,6 +131,7 @@ object FeatureRegistry {
             .register(AutoMessageForwardFeature())
             .register(ConversationGroupFeature())
             .register(ConversationTabsFeature())
+            .register(ConversationPriorityFeature())
             .register(MessageAffixFeature())
             .register(TypingReportBlockFeature())
             .register(PatBlockFeature())
