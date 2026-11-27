@@ -1,6 +1,8 @@
 package h.Hchat.hooks.items.gameemoji
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
 import h.Hchat.hooks.core.HookCallback
@@ -61,64 +63,141 @@ private class GameEmojiRuntime(
     private val replaying = ThreadLocal<Boolean>()
     private val dialogShowing = AtomicBoolean(false)
     private var emojiFields: Map<String, Field> = emptyMap()
+    private var emojiFieldsClass: Class<*>? = null
 
     @Volatile private var installed = false
 
     @Synchronized
     fun install(): Boolean {
         if (installed) return true
-        val method = context.dexFinder().emojiSendMethod ?: run {
+        val methods = locateSendMethods()
+        if (methods.isEmpty()) {
             logger("游戏表情发送方法未找到", null)
             return false
         }
-        if (!isEmojiSendMethod(method)) {
-            logger("游戏表情发送方法形状不匹配: ${method.declaringClass.name}#${method.name}", null)
-            return false
-        }
-        val fields = resolveEmojiFields(method.parameterTypes[1]) ?: return false
-        emojiFields = fields
         return runCatching {
-            HookRegistry.get().hook(method, object : HookCallback {
-                override fun before(param: HookParam) {
-                    if (replaying.get() == true) return
-                    val emojiInfo = param.args?.getOrNull(1) ?: return
-                    val gameType = detectGameType(emojiInfo) ?: return
-                    when {
-                        GameEmojiSettings.pickBeforeSendEnabled(context.hostContext()) -> {
-                            interceptForChoice(method, param, gameType)
-                        }
-                        GameEmojiSettings.fixedResultEnabled(context.hostContext()) -> {
+            methods.forEach { method ->
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
+                        if (replaying.get() == true) return
+                        val emojiInfo = findEmojiArg(param.args) ?: return
+                        if (ensureEmojiFields(emojiInfo.javaClass) == null) return
+                        val gameType = detectGameType(emojiInfo) ?: return
+                        val fixed = GameEmojiSettings.fixedResultEnabled(context.hostContext())
+                        val pick = GameEmojiSettings.pickBeforeSendEnabled(context.hostContext())
+                        if (!fixed && !pick) return
+                        if (pick) {
+                            interceptForChoice(method, param, gameType, emojiInfo)
+                        } else {
                             val result = configuredResult(gameType)
                             if (!applyResult(emojiInfo, gameType, result)) {
                                 logger("改写游戏表情结果失败", null)
                             }
                         }
                     }
-                }
-            })
+                })
+            }
             installed = true
             true
         }.getOrElse {
             emojiFields = emptyMap()
+            emojiFieldsClass = null
             logger("游戏表情发送 Hook 安装失败", it)
             false
         }
     }
 
+    private fun locateSendMethods(): List<Method> {
+        val loader = context.hostClassLoader()
+        val out = LinkedHashMap<String, Method>()
+        fun add(method: Method?) {
+            method ?: return
+            out.putIfAbsent("${method.declaringClass.name}#${method.name}${method.parameterTypes.joinToString { it.name }}", method)
+        }
+        // 聊天窗口表情发送组件（8.0.80 由 component.sm/wm 调用）。
+        val chatSender = KavaReflector.loadClass("com.tencent.mm.ui.chatting.k8", loader)
+        chatSender?.let { sender ->
+            KavaReflector.declaredMethods(sender).filter { method ->
+                method.parameterTypes.size == 1 && isEmojiInfoType(method.parameterTypes[0])
+            }.forEach(::add)
+        }
+        // 聊天窗口最终发送入口。
+        KavaReflector.loadClass("com.tencent.mm.feature.emoji.s0", loader)?.let { sender ->
+            KavaReflector.declaredMethods(sender).firstOrNull { method ->
+                method.name == "Mj" && method.parameterTypes.size == 1 &&
+                    isEmojiInfoType(method.parameterTypes[0])
+            }?.let(::add)
+        }
+        // 其他发送路径兜底。
+        KavaReflector.loadClass("com.tencent.mm.feature.emoji.u0", loader)?.let { sender ->
+            KavaReflector.declaredMethods(sender).firstOrNull { method ->
+                method.name == "Ej" &&
+                    method.parameterTypes.size == 4 &&
+                    method.parameterTypes[0].name == "android.content.Context" &&
+                    isEmojiInfoType(method.parameterTypes[1])
+            }?.let(::add)
+        }
+        KavaReflector.loadClass("com.tencent.mm.feature.emoji.b0", loader)?.let { sender ->
+            val candidates = KavaReflector.declaredMethods(sender).filter { method ->
+                method.returnType == Void.TYPE && method.parameterTypes.any(::isEmojiInfoType)
+            }
+            add(candidates.firstOrNull { it.name == "Tj" })
+        }
+        add(context.dexFinder().emojiSendMethod?.takeIf(::isEmojiSendMethod))
+        return out.values.toList()
+    }
+
+    private fun isEmojiInfoType(type: Class<*>): Boolean {
+        val name = type.name
+        return name == "com.tencent.mm.storage.emotion.EmojiInfo" ||
+            name == "com.tencent.mm.api.IEmojiInfo" ||
+            name.endsWith(".EmojiInfo")
+    }
+
+    private fun findEmojiArg(args: Array<Any?>?): Any? {
+        args ?: return null
+        return args.firstOrNull { value ->
+            val name = value?.javaClass?.name ?: return@firstOrNull false
+            name == "com.tencent.mm.storage.emotion.EmojiInfo" ||
+                name.endsWith(".EmojiInfo") ||
+                name == "com.tencent.mm.api.IEmojiInfo" ||
+                name.endsWith("IEmojiInfo")
+        }
+    }
+
+    private fun ensureEmojiFields(emojiClass: Class<*>): Map<String, Field>? {
+        emojiFields.takeIf { emojiFieldsClass == emojiClass && it.isNotEmpty() }?.let { return it }
+        val resolved = resolveEmojiFields(emojiClass) ?: return null
+        emojiFields = resolved
+        emojiFieldsClass = emojiClass
+        return resolved
+    }
+
     private fun interceptForChoice(
         method: Method,
         param: HookParam,
-        gameType: GameType
+        gameType: GameType,
+        emojiInfo: Any
     ) {
         val activity = (WeChatApis.currentActivity()?.currentActivity() as? Activity)
             ?.takeUnless { it.isFinishing || it.isDestroyed }
-            ?: return
+            ?: findActivityFromObject(param.thisObject)
+            ?: run {
+                logger("选择骰子结果失败: 未找到 Activity", null)
+                return
+            }
         if (!dialogShowing.compareAndSet(false, true)) {
-            param.result = null
+            param.result = cancelResult(method)
             return
         }
-        val pending = PendingSend(method, param.thisObject, param.args.copyOf(), gameType)
-        param.result = null
+        val emojiIndex = param.args?.indexOfFirst { it === emojiInfo } ?: -1
+        if (emojiIndex < 0) {
+            logger("选择骰子结果失败: EmojiInfo 参数索引未找到", null)
+            dialogShowing.set(false)
+            return
+        }
+        val pending = PendingSend(method, param.thisObject, param.args.copyOf(), gameType, emojiIndex)
+        param.result = cancelResult(method)
         mainHandler.post {
             if (activity.isFinishing || activity.isDestroyed) {
                 dialogShowing.set(false)
@@ -143,8 +222,47 @@ private class GameEmojiRuntime(
         }
     }
 
+    private fun cancelResult(method: Method): Any? = when (method.returnType) {
+        java.lang.Boolean.TYPE -> false
+        Integer.TYPE -> 0
+        java.lang.Long.TYPE -> 0L
+        java.lang.Float.TYPE -> 0f
+        java.lang.Double.TYPE -> 0.0
+        else -> null
+    }
+
+    private fun findActivityFromObject(target: Any?, depth: Int = 2): Activity? {
+        target ?: return null
+        if (target is Activity) return target
+        if (target is Context) return findActivity(target)
+        if (depth <= 0) return null
+        val clazz = target.javaClass
+        if (clazz.name.startsWith("java.") || clazz.name.startsWith("android.")) return null
+        for (field in KavaReflector.declaredFields(clazz)) {
+            if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+            val value = runCatching { KavaReflector.readField(field, target) }.getOrNull() ?: continue
+            if (value is Activity) return value
+            if (value is Context) findActivity(value)?.let { return it }
+            if (field.type.name.startsWith("com.tencent.mm.")) {
+                findActivityFromObject(value, depth - 1)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private fun findActivity(context: Context?): Activity? {
+        var current = context
+        while (current is ContextWrapper) {
+            if (current is Activity) return current
+            val base = current.baseContext
+            if (base === current) break
+            current = base
+        }
+        return current as? Activity
+    }
+
     private fun replay(pending: PendingSend, selected: GameResult?) {
-        val emojiInfo = pending.args.getOrNull(1) ?: return
+        val emojiInfo = pending.args.getOrNull(pending.emojiArgIndex) ?: return
         if (selected != null && !applyResult(emojiInfo, pending.gameType, selected.value)) {
             logger("应用所选游戏表情结果失败", null)
             return
@@ -236,7 +354,8 @@ private class GameEmojiRuntime(
         val method: Method,
         val receiver: Any?,
         val args: Array<Any?>,
-        val gameType: GameType
+        val gameType: GameType,
+        val emojiArgIndex: Int
     )
 
     private enum class GameType(val protocolType: Int) {

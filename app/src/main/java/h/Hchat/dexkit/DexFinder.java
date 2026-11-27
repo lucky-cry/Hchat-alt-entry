@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.util.Pair;
+import h.Hchat.BuildConfig;
 import h.Hchat.hooks.api.runtime.WeChatVersionApi;
 import h.Hchat.preferences.HchatStorage;
 import h.Hchat.utils.KavaReflector;
@@ -42,7 +43,7 @@ public class DexFinder {
     private static final String CACHE_COMPLETE = "cache.complete";
     private static final String CACHE_KEY = "cache.key";
     private static final String CACHE_SNAPSHOT_VERSION_KEY = "cache.snapshot.version";
-    private static final String CACHE_SNAPSHOT_VERSION = "6";
+    private static final String CACHE_SNAPSHOT_VERSION = "7";
     private static final String SEND_TEXT_LOCATOR_VERSION_KEY = "send.text.locator.version";
     private static final String SEND_TEXT_LOCATOR_VERSION = "1";
     private static final String CACHE_SEND_TEXT_LOCATOR_RESOLVED = "locator.send.text.resolved";
@@ -307,11 +308,30 @@ public class DexFinder {
                 h.Hchat.utils.HLog.e(TAG + " 缓存缺少 AddMsg 类，补解析一次");
                 resolveAddMsgClasses();
                 repaired = true;
+            } else if (addMsgClasses.stream().noneMatch(clazz -> "com.tencent.mm.storage.x7".equals(clazz.getName()))) {
+                // 旧快照可能缓存了非空但已过期的 AddMsg 类；确保 8.0.80 已知入口 x7 在场。
+                h.Hchat.utils.HLog.e(TAG + " 缓存 AddMsg 类缺少 x7，补登记");
+                addKnownAddMsgClass("com.tencent.mm.storage.x7");
+                repaired = true;
             }
-            if (emojiSendMethod == null) {
-                // 8.0.80 的 emoji 锚点曾经变化，旧快照可能缓存了 null。
-                h.Hchat.utils.HLog.e(TAG + " 缓存缺少 emojiSendMethod，补解析一次");
+            if (emojiSendMethod == null || !isEmojiSendMethod(emojiSendMethod)) {
+                // 8.0.80 的 emoji 锚点曾经变化，旧快照可能缓存了 null 或错误方法。
+                h.Hchat.utils.HLog.e(TAG + " 缓存 emojiSendMethod 缺失或形状不匹配，补解析一次");
                 resolveSendEmojiApi(true);
+                repaired = true;
+            }
+            if (!isSendFileAppMsgMethod(sendFileMethod) ||
+                    sendFileAttachDirMethod == null || sendFileAttachPathMethod == null) {
+                // 旧快照可能缓存了 null/错误文件发送入口，导致点歌/语音/文件发送失败。
+                h.Hchat.utils.HLog.e(TAG + " 缓存文件发送 API 缺失或形状不匹配，补解析一次");
+                resolveSendFileApi(true);
+                repaired = true;
+            }
+            if (!isSendXmlAppMsgMethod(sendXmlAppMsgMethod) || appMsgParseMethod == null ||
+                    !isAppMsgParseMethod(appMsgParseMethod, sendXmlAppMsgMethod.getParameterTypes()[0])) {
+                // AppMsgLogic XML 发送入口缓存过期会导致点歌卡片/名片/XML 消息失败。
+                h.Hchat.utils.HLog.e(TAG + " 缓存 XML/AppMsg 发送 API 缺失或形状不匹配，补解析一次");
+                resolveSendXmlApi(true);
                 repaired = true;
             }
             if (!isPrivateConversationMuteApiReady()) {
@@ -466,9 +486,7 @@ public class DexFinder {
             // 8.0.80 已移除 dkAddMsg/processAddMsg 字符串。
             // MsgInfoStorage.I1(String, MsgInfo) 是实际入库入口，MsgInfo 具备
             // e/f/h/i/m 等 AddMsg 字段，可作为稳定兜底。
-            if (addMsgClasses.isEmpty()) {
-                addKnownAddMsgClass("com.tencent.mm.storage.x7");
-            }
+            addKnownAddMsgClass("com.tencent.mm.storage.x7");
 
             if (addMsgClasses.isEmpty()) {
                 h.Hchat.utils.HLog.e(TAG + " AddMsg类仍未找到");
@@ -1394,7 +1412,11 @@ public class DexFinder {
     }
 
     public void resolveSendFileApi() {
-        if (ensureSnapshotLoaded()) return;
+        resolveSendFileApi(false);
+    }
+
+    public void resolveSendFileApi(boolean force) {
+        if (!force && ensureSnapshotLoaded()) return;
         try {
             if (isSendFileAppMsgMethod(sendFileMethod)) {
                 if (sendFileAttachDirMethod == null || sendFileAttachPathMethod == null) {
@@ -1419,6 +1441,19 @@ public class DexFinder {
                 resolveSendFileAttachHelpers(clazz);
                 break;
             }
+            if (sendFileMethod == null) {
+                // 8.0.80: com.tencent.mm.pluginsdk.model.app.k0#F(WXMediaMessage,String,String,String,int,String)
+                Class<?> known = KavaReflector.loadClass(
+                        "com.tencent.mm.pluginsdk.model.app.k0", classLoader);
+                if (known != null) {
+                    Method method = findSendFileAppMsgMethod(known);
+                    if (method != null) {
+                        KavaReflector.accessible(method);
+                        sendFileMethod = method;
+                        resolveSendFileAttachHelpers(known);
+                    }
+                }
+            }
             if (sendFileMethod != null && (sendFileAttachDirMethod == null || sendFileAttachPathMethod == null)) {
                 resolveSendFileAttachHelpers(sendFileMethod.getDeclaringClass());
             }
@@ -1430,7 +1465,11 @@ public class DexFinder {
     }
 
     public void resolveSendXmlApi() {
-        if (ensureSnapshotLoaded()) return;
+        resolveSendXmlApi(false);
+    }
+
+    public void resolveSendXmlApi(boolean force) {
+        if (!force && ensureSnapshotLoaded()) return;
         try {
             if (isSendXmlAppMsgMethod(sendXmlAppMsgMethod)) {
                 resolveAppMsgParseMethod(sendXmlAppMsgMethod.getParameterTypes()[0]);
@@ -1448,6 +1487,21 @@ public class DexFinder {
                     resolveAppMsgParseMethod(method.getParameterTypes()[0]);
                     break;
                 } catch (Throwable ignored) {}
+            }
+            if (sendXmlAppMsgMethod == null) {
+                // 8.0.80 已无 "summerbig sendAppMsg attachFilePath" 锚点；
+                // com.tencent.mm.pluginsdk.model.app.k0#M/N 是静态 Pair 返回的发送入口。
+                Class<?> known = KavaReflector.loadClass(
+                        "com.tencent.mm.pluginsdk.model.app.k0", classLoader);
+                if (known != null) {
+                    for (Method method : KavaReflector.declaredMethods(known)) {
+                        if (!isSendXmlAppMsgMethod(method)) continue;
+                        KavaReflector.accessible(method);
+                        sendXmlAppMsgMethod = method;
+                        resolveAppMsgParseMethod(method.getParameterTypes()[0]);
+                        break;
+                    }
+                }
             }
 
             logDetail("XML发送方法: " + methodName(sendXmlAppMsgMethod)
@@ -5339,7 +5393,9 @@ public class DexFinder {
     }
 
     private String buildRuntimeCacheKey(Context context, ClassLoader loader) {
-        return WeChatVersionApi.buildCacheKey(context, loader);
+        // 模块版本指纹必须进入缓存身份：解析代码/目标集合变化后不能复用旧快照。
+        return WeChatVersionApi.buildCacheKey(context, loader)
+                + "|hchat:" + BuildConfig.VERSION_CODE + ":" + BuildConfig.VERSION_NAME;
     }
 
     private String shortKey(String key) {

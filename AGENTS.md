@@ -18,6 +18,14 @@
 - 其他微信版本没有逐版验证时，必须明确写“未验证”，不能假设兼容。
 - 本分支只支持 `arm64-v8a` 和 64 位微信进程；新增 native 库只提供 `arm64-v8a`。
 
+## 逆向分析工具
+
+- APK 逆向分析统一优先使用 DexSQL：https://github.com/LSPosed/dexsql-release
+- 本机可执行文件：`D:\android-build-tools\dexsql.exe`
+- 目标微信 APK：https://dldir1v6.qq.com/weixin/android/weixin8080android3220_0x28005033_arm64.apk
+- 常用方式：`dexsql tables --input <apk>` 查看表结构，`dexsql query --input <apk> --sql "..."` 查询类、方法、字段、调用关系和字符串；辅助工具可用 DexKit、`dexdump`、`scripts/dex_class_methods.py`。
+- 先用 DexSQL 在当前目标 APK 上确认混淆名，再写 DexKit/反射代码；不要凭记忆猜类名、字段或方法。
+
 ## 参考项目
 
 - 重点参考项目：WeKit，https://github.com/Ujhhgtg/WeKit
