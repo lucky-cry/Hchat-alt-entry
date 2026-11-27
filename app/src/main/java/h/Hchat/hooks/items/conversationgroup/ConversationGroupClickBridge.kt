@@ -240,6 +240,21 @@ internal object ConversationGroupClickBridge {
                     HLog.e("$TAG Fragment 观察器命中: ${fragment.javaClass.name} talker=$talker")
                     val activity = KavaReflector.invokeMethod(fragment, "getActivity") as? Activity
                         ?: return
+                    // ConvBoxServiceConversationUI 本身就是微信原生分组会话页：
+                    // 让原生列表负责滑动、排序、预览和头像样式，不能再盖自绘浮层。
+                    if (fragment.javaClass.name.startsWith(
+                            "com.tencent.mm.ui.conversation.ConvBoxServiceConversationUI"
+                        )
+                    ) {
+                        HLog.e("$TAG 原生分组页使用原生列表: talker=$talker")
+                        return@after
+                    }
+                    // ConvBoxServiceConversationUI 内部也可能挂载 ChattingUIFragment；
+                    // 此时仍属于原生分组页，不能再盖自绘浮层，否则第二次进入会覆盖原生列表。
+                    if (activity.javaClass.name.contains("ConvBoxServiceConversationUI")) {
+                        HLog.e("$TAG 原生分组页内跳过自绘浮层: fragment=${fragment.javaClass.name} talker=$talker")
+                        return@after
+                    }
                     // ChattingUIFragment 的 onResume 早于聊天内容最终布局；立即挂浮层
                     // 会被随后渲染的原生“非好友”页盖住。延后一拍再显示，并在
                     // 后续 onResume 中把已有浮层提到最前。
@@ -410,6 +425,10 @@ internal object ConversationGroupClickBridge {
                 ?: return
             HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
             pendingUserTalkers.add(talker)
+            if (activity.javaClass.name.contains("ConvBoxServiceConversationUI")) {
+                HLog.e("$TAG 原生分组页内跳过自绘浮层: proxy talker=$talker")
+                return
+            }
             showGroupPageOverlay(activity, talker)
             activeOverlays[activity]?.bringToFront()
         }
@@ -551,15 +570,12 @@ internal object ConversationGroupClickBridge {
             return
         }
         val contacts = WeChatApis.contact()?.contacts()
-        val rows = group.conversationIds.map { id ->
-            id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
-        }
         val details = runCatching {
             val ids = group.conversationIds
             if (ids.isEmpty()) return@runCatching emptyMap()
             val placeholders = ids.joinToString(",") { "?" }
             WeChatApis.database()?.query(
-                "SELECT username, content, conversationTime, " +
+                "SELECT username, content, conversationTime, msgType, digest, digestUser, " +
                     "IFNULL(unReadCount,0) AS unReadCount, " +
                     "IFNULL(unReadMuteCount,0) AS unReadMuteCount " +
                     "FROM rconversation WHERE username IN ($placeholders)",
@@ -569,6 +585,14 @@ internal object ConversationGroupClickBridge {
                 username to row
             }.toMap()
         }.getOrDefault(emptyMap())
+        // 分组内按会话最新消息时间倒序，和微信首页一致。
+        val rows = group.conversationIds
+            .sortedWith(compareByDescending { id ->
+                (details[id]?.get("conversationTime") as? Number)?.toLong() ?: 0L
+            })
+            .map { id ->
+                id to (contacts?.getDisplayName(id)?.takeIf { it.isNotBlank() } ?: id)
+            }
         activity.runOnUiThread {
             val page = FrameLayout(activity).apply {
                 setBackgroundColor(Color.WHITE)
@@ -620,11 +644,26 @@ internal object ConversationGroupClickBridge {
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(16), dp(10), dp(16), dp(10))
                     minimumHeight = dp(68)
-                    isClickable = false
+                    isClickable = true
+                    setOnClickListener {
+                        HLog.e("$TAG 点击分组行: id=$id")
+                        // 保持分组页在底下，等目标聊天 Activity 盖上来；
+                        // 先移除会露出原生“非好友”页，造成闪烁。
+                        runCatching {
+                            activity.startActivity(
+                                Intent().setClassName(activity, CHATTING_UI).also {
+                                    it.putExtra(CHAT_USER, id)
+                                }
+                            )
+                        }.onFailure {
+                            HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
+                        }
+                    }
                 }
                 val detail = details[id].orEmpty()
                 val digest = formatGroupDigest(
                     (detail["content"] as? String).orEmpty(),
+                    (detail["msgType"] as? Number)?.toInt() ?: 0,
                     id,
                     contacts
                 )
@@ -734,7 +773,14 @@ internal object ConversationGroupClickBridge {
                     setBackgroundColor(Color.rgb(235, 235, 235))
                 }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1))
             }
-            content.addView(list, LinearLayout.LayoutParams(
+            val scroll = android.widget.ScrollView(activity).apply {
+                isFillViewport = true
+                addView(list, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+                ))
+            }
+            content.addView(scroll, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,
                 1f
@@ -743,37 +789,8 @@ internal object ConversationGroupClickBridge {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             ))
-            page.setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_UP) {
-                    val y = event.y
-                    if (y < dp(104)) {
-                        // 只有左上角返回箭头关闭分组页；标题/空白区域只消费点击，
-                        // 不能露出底下的原生“非好友”页。
-                        if (event.x < dp(64)) {
-                            removeGroupPage(activity)
-                            KavaReflector.invokeMethod(activity, "closeChatting", false)
-                        }
-                    } else {
-                        val index = ((y - dp(104)) / dp(68)).toInt()
-                        val child = rows.getOrNull(index)?.first
-                        if (child != null) {
-                            HLog.e("$TAG 点击分组行: id=$child")
-                            // 保持分组页在底下，等目标聊天 Activity 盖上来；
-                            // 先移除会露出原生“非好友”页，造成闪烁。
-                            runCatching {
-                                activity.startActivity(
-                                    Intent().setClassName(activity, CHATTING_UI).also {
-                                        it.putExtra(CHAT_USER, child)
-                                    }
-                                )
-                            }.onFailure {
-                                HLog.e("$TAG 打开分组会话失败: ${it.message}", it)
-                            }
-                        }
-                    }
-                }
-                true
-            }
+            // 列表自身在 ScrollView 中处理滑动和行点击；页面只负责拦截底层点击。
+            page.isClickable = true
             decor.addView(page, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -880,19 +897,36 @@ internal object ConversationGroupClickBridge {
 
     private fun formatGroupDigest(
         raw: String,
+        msgType: Int,
         chatId: String,
         contacts: h.Hchat.hooks.api.contact.WeChatContactApi?
     ): String {
         if (raw.isBlank()) return if (chatId.endsWith("@chatroom")) "群聊" else "会话"
         var text = raw.trim()
         var senderId: String? = null
-        Regex("^([A-Za-z0-9_@.\\-]{2,64}):\\s*", RegexOption.DOT_MATCHES_ALL)
+        // 群聊 rconversation.content 常见格式为“发送者: 内容”，发送者可能是中文备注。
+        Regex("^([^:\\n]{1,80}):\\s*", RegexOption.DOT_MATCHES_ALL)
             .find(text)
             ?.let { match ->
-                senderId = match.groupValues.getOrNull(1)
+                senderId = match.groupValues.getOrNull(1)?.trim()
                 text = text.substring(match.range.last + 1)
             }
-        if (text.contains("<msg") || text.contains("<content")) {
+        // 非文本消息不能直接展示 rconversation 的内部编码（例如语音的 8560:0）。
+        val typeLabel = when (msgType) {
+            3 -> "[图片]"
+            34 -> "[语音]"
+            43, 62 -> "[视频]"
+            47 -> "[动画表情]"
+            48 -> "[位置]"
+            49 -> null
+            10000 -> null
+            1 -> null
+            in 1..10000 -> "[消息]"
+            else -> null
+        }
+        if (typeLabel != null) {
+            text = typeLabel
+        } else if (text.contains("<msg") || text.contains("<content")) {
             val content = Regex("<content>(.*?)</content>", RegexOption.DOT_MATCHES_ALL)
                 .find(text)?.groupValues?.getOrNull(1)
             val title = Regex("<title>(.*?)</title>", RegexOption.DOT_MATCHES_ALL)
