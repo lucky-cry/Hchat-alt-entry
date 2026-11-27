@@ -352,11 +352,30 @@ sendNetworkRequest 失败: dispatcher=false method=false
 **排查过程**：20+ 次提交，从"第 1 步"到"第 16 步"逐层追踪
 `LayoutManager → AnchorInfo → LayoutState → OrientationHelper`。
 
-**最终修法**（`f5d2029`）
-> 离开"未读"标签时**临时禁用预测动画**（ItemAnimator / predictive animations）。
+**最终根因**（精确到数值）
 
-**为什么难**：空白只在"快速切换 + 未读标签"组合下出现，
-是 RecyclerView 预测动画与锚点恢复的竞争，不是布局参数本身错。
+从「未读」切到其他分类时，宿主 `ItemAnimator` 的预测动画会让
+`LinearLayoutManager` 在 `onLayoutChildren` 中执行 `offsetChildrenVertical(1588)`，
+把 `TaskBarContainer` 从 `top=-2068` 推到 `-480`，首页顶部因此出现大块空白。
+
+**修法**（`f5d2029`）
+> 离开「未读」前临时保存并置空宿主列表的 `ItemAnimator`，600ms 后恢复。
+> 只绕开预测布局，不改滚动位置、不改 View 树。
+
+**为什么难**：不是布局参数错，而是预测动画与锚点恢复的竞争；
+且只在"快速切换 + 未读标签"组合下复现。
+
+### 坑 10b：快速切换标签偶发不生效
+
+**根因**：`requestRefresh` 的旧延迟链取消无效，多个投影刷新并发，
+**旧查询结果覆盖新结果**。
+
+**修法**：按切换代次只保留一条刷新链，取消旧 `refreshHostAdapters`，
+并把 `ConversationGroupHomeProjection.refresh` 改为串行——运行期间的新请求
+在结束后补跑一次。
+
+**定位过程提交**：`b9e0f35` → `1f12fc3`（第 4~16 步）；
+**历史排查提交**：`3e827c1`、`be8f93a`、`00525e7`、`e8e096e`、`7ce2046`、`1731cdf`。
 
 **教训**
 1. 布局类问题必须先建立**假设清单**，每次只改一个变量（实验 A/B/C）；
@@ -379,7 +398,7 @@ sendNetworkRequest 失败: dispatcher=false method=false
 | 功能 | 关键实现 | 坑 |
 |---|---|---|
 | 取消模块 + 安全模式 | `CancelModuleFeature` + `core/SafeMode.kt` | 加号菜单入口不显示开关/图标、点击无反应 → 改独立界面入口 |
-| 会话优先级排序 | `ConversationPriority*` 三件套 | 与分组虚拟行刷新竞争 |
+| 会话优先级排序 | `ConversationPriority*` 三件套 | 与分组虚拟行刷新竞争；实现参考 WeKit `SuperConversationPinning`，最终 Hook 首页 MVVM 会话项的 `compareTo`，而非排序 Adapter 数据 |
 | 表情收藏上限 | `EmojiCollectionLimitFeature` | 补解析被旧快照短路 |
 | 隐藏 Windows 在线 | `windowsonline/` | 删除整行会破坏布局 → 改为折叠整行 |
 | Agent 请求头 | `ScriptPluginAgentRequestHeaders` | 需独立设置弹窗 |
@@ -424,6 +443,9 @@ sendNetworkRequest 失败: dispatcher=false method=false
 | `scripts/check_wechat_anchors.py` | 批量核对锚点字符串是否存在 |
 | `scripts/dex_string_refs.py` | 查字符串被哪些类引用（判断锚点可用性） |
 | `scripts/dex_class_methods.py` | 导出类的方法签名（定位构造器/方法形状） |
+
+> 逆向优先用 DexSQL（`dexsql query --sql "..."`）在目标 APK 上确认混淆名，
+> 再用 DexKit/`KavaReflector` 写代码；不要凭记忆猜类名、字段、方法。
 | `tools/check_hook_migration.py` | 迁移预检（9 类错误） |
 
 ### CI
