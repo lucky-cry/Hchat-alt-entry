@@ -44,6 +44,8 @@ public class DexFinder {
     private static final String CACHE_KEY = "cache.key";
     private static final String CACHE_SNAPSHOT_VERSION_KEY = "cache.snapshot.version";
     private static final String CACHE_SNAPSHOT_VERSION = "7";
+    private static final String CACHE_MANIFEST = "cache.manifest";
+    private static final String CACHE_CRITICAL_SCHEMA = "1";
     private static final String SEND_TEXT_LOCATOR_VERSION_KEY = "send.text.locator.version";
     private static final String SEND_TEXT_LOCATOR_VERSION = "1";
     private static final String CACHE_SEND_TEXT_LOCATOR_RESOLVED = "locator.send.text.resolved";
@@ -295,7 +297,6 @@ public class DexFinder {
         openUnionLocatorResolved = false;
         networkQueueLocatorResolved = false;
         if (loadCache()) {
-            resolvedAll = true;
             boolean repaired = false;
             if (sqliteDbWrapperClass == null) {
                 // 旧快照可能把「解析失败」也缓存了，这里补一次，避免消息变更监听永久失效。
@@ -368,9 +369,19 @@ public class DexFinder {
                 resolveSendTextMsg();
                 repaired = true;
             }
-            if (repaired) saveCache();
-            logDetail("命中缓存: " + shortKey(runtimeCacheKey));
-            return;
+            if (repaired) {
+                // 修复后仍不完整时禁止写回；下一次启动会整份重新解析。
+                if (criticalCacheValid()) saveCache();
+            }
+            if (criticalCacheValid()) {
+                logDetail("命中缓存: " + shortKey(runtimeCacheKey));
+                resolvedAll = true;
+                return;
+            }
+            List<String> issues = criticalCacheIssues();
+            h.Hchat.utils.HLog.e(TAG + " 缓存关键项校验失败，整份作废并全量重解析: " + issues);
+            cachePrefs.edit().clear().commit();
+            resetCriticalForReparse();
         }
         cacheDescriptorInvalid = false;
         resolveAddMsgClasses();
@@ -419,6 +430,70 @@ public class DexFinder {
         saveCache();
         resolvedAll = true;
         logDetail("解析完成并缓存: " + shortKey(runtimeCacheKey));
+    }
+
+    private String cacheManifest() {
+        return CACHE_SNAPSHOT_VERSION + "|" + CACHE_CRITICAL_SCHEMA + "|" + runtimeCacheKey;
+    }
+
+    /** 缓存关键项统一校验清单：任一失败即整份缓存作废并全量重解析。 */
+    private List<String> criticalCacheIssues() {
+        List<String> issues = new ArrayList<>();
+        if (sqliteDbWrapperClass == null) issues.add("sqliteWrapper");
+        if (addMsgClasses == null || addMsgClasses.stream()
+                .noneMatch(clazz -> "com.tencent.mm.storage.x7".equals(clazz.getName()))) {
+            issues.add("addMsg.x7");
+        }
+        if (!isEmojiSendMethod(emojiSendMethod)) issues.add("emojiSend");
+        if (!isSendFileAppMsgMethod(sendFileMethod)
+                || sendFileAttachDirMethod == null || sendFileAttachPathMethod == null) {
+            issues.add("sendFile");
+        }
+        if (!isSendXmlAppMsgMethod(sendXmlAppMsgMethod) || appMsgParseMethod == null
+                || !isAppMsgParseMethod(appMsgParseMethod, sendXmlAppMsgMethod.getParameterTypes()[0])) {
+            issues.add("sendXml/appMsgParse");
+        }
+        if (!isSendTextRequestApiValid()) issues.add("sendText");
+        if (!isSendImageMethod(sendImageMethod)) issues.add("sendImage");
+        if (sendVideoMethod == null) issues.add("sendVideo");
+        if (serviceGetterMethod == null || !isServiceGetterMethod(serviceGetterMethod)) {
+            issues.add("serviceGetter");
+        }
+        if (!networkQueueLocatorResolved || netQueueClass == null) issues.add("networkQueue");
+        if (!receiveUnionLocatorResolved) issues.add("receiveUnion");
+        if (!openUnionLocatorResolved) issues.add("openUnion");
+        return issues;
+    }
+
+    private boolean criticalCacheValid() {
+        return criticalCacheIssues().isEmpty();
+    }
+
+    /** 缓存作废后清掉关键字段，确保接下来的全量解析不会因旧值短路。 */
+    private void resetCriticalForReparse() {
+        sqliteDbWrapperClass = null;
+        if (addMsgClasses != null) addMsgClasses.clear();
+        emojiSendMethod = null;
+        sendFileMethod = null;
+        sendFileAttachDirMethod = null;
+        sendFileAttachPathMethod = null;
+        sendXmlAppMsgMethod = null;
+        appMsgParseMethod = null;
+        sendTextMsgClass = null;
+        sendTextMsgCtorLong = null;
+        sendTextMsgCtorObject = null;
+        sendImageMethod = null;
+        sendVideoMethod = null;
+        serviceGetterMethod = null;
+        netQueueClass = null;
+        networkQueueLocatorResolved = false;
+        receiveLuckyMoneyUnionClass = null;
+        openLuckyMoneyUnionClass = null;
+        unionReceiveCtor = null;
+        unionOpenCtor10 = null;
+        unionOpenCtor9 = null;
+        receiveUnionLocatorResolved = false;
+        openUnionLocatorResolved = false;
     }
 
     public synchronized boolean isResolvedAll() {
@@ -3799,6 +3874,8 @@ public class DexFinder {
             }
             if (!CACHE_SNAPSHOT_VERSION.equals(
                     cachePrefs.getString(CACHE_SNAPSHOT_VERSION_KEY, ""))) return false;
+            if (!cachePrefs.getBoolean(CACHE_COMPLETE, false)) return false;
+            if (!cacheManifest().equals(cachePrefs.getString(CACHE_MANIFEST, ""))) return false;
 
             addMsgClasses = loadClassList("addMsgClasses");
             receiveLuckyMoneyClass = loadClass("receiveLuckyMoneyClass");
@@ -5060,6 +5137,11 @@ public class DexFinder {
 
     private void saveCache() {
         if (cachePrefs == null || runtimeCacheKey.length() == 0) return;
+        // P1：关键 locator 未全部就绪时不写任何快照，避免负缓存跨启动复用。
+        if (!criticalCacheValid()) {
+            h.Hchat.utils.HLog.e(TAG + " 关键 locator 未全部就绪，跳过缓存写入: " + criticalCacheIssues());
+            return;
+        }
         try {
             SharedPreferences.Editor editor = cachePrefs.edit().clear();
             editor.putString(CACHE_KEY, runtimeCacheKey);
@@ -5224,11 +5306,15 @@ public class DexFinder {
             editor.putBoolean(LOCATOR_ECS_COMPLETE, ecsGiftLocatorResolved);
             editor.putBoolean(LOCATOR_MSG_DESC_COMPLETE, msgDescLocatorResolved);
             editor.putBoolean(LOCATOR_PROTOBUF_COMPLETE, protobufLocatorResolved);
-            boolean snapshotReady = !cacheDescriptorInvalid;
+            boolean snapshotReady = !cacheDescriptorInvalid && criticalCacheValid();
             editor.putString(CACHE_SNAPSHOT_VERSION_KEY,
                     snapshotReady ? CACHE_SNAPSHOT_VERSION : "");
+            editor.putString(CACHE_MANIFEST,
+                    snapshotReady ? cacheManifest() : "");
             editor.putBoolean(CACHE_COMPLETE, snapshotReady);
-            editor.apply();
+            if (!editor.commit()) {
+                h.Hchat.utils.HLog.e(TAG + " 保存解析缓存失败: commit=false");
+            }
         } catch (Throwable e) {
             h.Hchat.utils.HLog.e(TAG + " 保存缓存失败: " + e.getMessage(), e);
         }
