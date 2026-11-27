@@ -56,7 +56,12 @@ class WeChatLocalMessageApi(
                     val args = param.args ?: return
                     val talker = args.getOrNull(0) as? String ?: return
                     if (talker != pending.talker) return
-                    param.result = pending.createTime
+                    // 微信消息表的 createTime 是秒级；调用方传入的是毫秒。
+                    // 直接返回秒级时间，避免毫秒写进秒字段导致年份变成 58875。
+                    val createTimeSeconds =
+                        if (pending.createTime > 10_000_000_000L) pending.createTime / 1000L
+                        else pending.createTime
+                    param.result = createTimeSeconds
                 }
             })
             createTimeHookInstalled = true
@@ -69,7 +74,10 @@ class WeChatLocalMessageApi(
     }
 
     fun insertSystemMessageAt(talker: String?, content: String?, createTime: Long): Long {
-        return insertSystemMessage(talker, content, createTime, false)
+        // 8.0.80 的系统消息插入链路会自行生成消息时间；强行替换 createTime
+        // 会让旧时间消息无法追加到当前聊天页，表现为“没有提示”。
+        // 这里先走微信原生时间，保证提示可见；精确插入位置改用原生撤回链路处理。
+        return insertSystemMessage(talker, content, createTime, true)
     }
 
     private fun insertSystemMessage(
@@ -122,6 +130,8 @@ class WeChatLocalMessageApi(
         val owner = newSystemMessageOwner(finder, method)
             ?: throw IllegalStateException("系统消息API实例创建失败")
         if (createTime != null) {
+            // 8.0.80 的时间辅助方法 w41.ba#o 接收/返回毫秒时间；
+            // 直接透传目标时间，避免秒级截断导致提示落到错误位置。
             pendingCreateTime.set(TimedInsert(talker, createTime))
         }
         return try {

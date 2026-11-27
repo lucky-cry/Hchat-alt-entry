@@ -3334,6 +3334,11 @@ public class DexFinder {
             if (localMessageInsertMethod != null && localMessageCreateTimeMethod == null) {
                 localMessageCreateTimeMethod = findLocalMessageCreateTimeMethod(localMessageInsertMethod.getDeclaringClass());
             }
+            if (localMessageCreateTimeMethod == null) {
+                // 8.0.80 系统消息插入走 MsgInfoStorageLogic 的静态时间辅助方法：
+                // w41.ba#o(String, long) -> long，参数/返回值均为毫秒/秒换算入口。
+                localMessageCreateTimeMethod = findKnownMessageCreateTimeMethod();
+            }
             if (localMessageInsertMethod != null && localMessageCreateTimeMethod != null) {
                 return count;
             }
@@ -5747,6 +5752,20 @@ public class DexFinder {
             }
         }
         return fallback;
+    }
+
+    private Method findKnownMessageCreateTimeMethod() {
+        try {
+            Class<?> clazz = KavaReflector.loadClass("w41.ba", classLoader);
+            if (clazz == null) return null;
+            for (Method method : KavaReflector.declaredMethods(clazz)) {
+                if ("o".equals(method.getName()) && isLocalMessageCreateTimeMethod(method)) {
+                    return KavaReflector.accessible(method);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private boolean isLocalMessageCreateTimeMethod(Method method) {

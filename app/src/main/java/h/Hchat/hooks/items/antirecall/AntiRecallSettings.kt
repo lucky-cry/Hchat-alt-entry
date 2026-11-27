@@ -5,6 +5,7 @@ object AntiRecallSettings {
     const val KEY_ENABLE = "anti_recall_enable"
     const val KEY_KEEP_SELF_RECALL = "anti_recall_keep_self"
     const val KEY_SHOW_NOTICE = "anti_recall_show_notice"
+    const val KEY_RECALLED_KEYS = "anti_recall_recalled_keys"
     const val KEY_NOTICE_TEXT = "anti_recall_notice_text"
     const val KEY_NOTICE_TIME_FORMAT = "anti_recall_notice_time_format"
 

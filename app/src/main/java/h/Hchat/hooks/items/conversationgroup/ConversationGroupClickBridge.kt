@@ -139,6 +139,44 @@ internal object ConversationGroupClickBridge {
         return ok || legacyInstalled
     }
 
+    /**
+     * 在 Activity.startActivity 阶段把“虚拟分组 -> ChattingUI”的 Intent 直接改写成
+     * 原生分组页，避免先创建 ChattingUI 再 finish 时微信组件尚未初始化导致 onDestroy 崩溃。
+     * 脚本/其他插件通过 startActivity 打开分组时也走这里。
+     */
+    fun installIntentRedirect(classLoader: ClassLoader): Boolean {
+        val activityClass = KavaReflector.loadClass("android.app.Activity", classLoader) ?: return false
+        var installed = false
+        KavaReflector.declaredMethods(activityClass).forEach { method ->
+            if (method.name != "startActivity" && method.name != "startActivityForResult") return@forEach
+            if (method.parameterTypes.isEmpty() ||
+                method.parameterTypes[0] != Intent::class.java
+            ) return@forEach
+            runCatching {
+                HookRegistry.get().hook(method, object : HookCallback {
+                    override fun before(param: HookParam) {
+                        val activity = param.thisObject as? Activity ?: return
+                        val intent = param.args?.getOrNull(0) as? Intent ?: return
+                        if (intent.component?.className != CHATTING_UI) return
+                        val talker = intent.getStringExtra(CHAT_USER)
+                            ?: intent.getStringExtra("Contact_User")
+                            ?: return
+                        if (!talker.startsWith(VIRTUAL_PREFIX)) return
+                        intent.setClassName(
+                            activity.packageName,
+                            "com.tencent.mm.ui.conversation.ConvBoxServiceConversationUI"
+                        )
+                        intent.putExtra("Contact_User", talker)
+                        HLog.e("$TAG 启动前重定向虚拟分组: talker=$talker")
+                    }
+                })
+                installed = true
+            }
+        }
+        if (installed) HLog.e("$TAG 分组 Intent 启动重定向已安装")
+        return installed
+    }
+
     /** 虚拟分组被当普通会话打开时，ChattingUI 直接转去原生分组页。 */
     fun installChattingRedirect(classLoader: ClassLoader): Boolean {
         val chattingClass = KavaReflector.loadClass(CHATTING_UI, classLoader) ?: return false

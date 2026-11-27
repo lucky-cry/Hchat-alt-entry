@@ -12711,64 +12711,13 @@ internal fun AntiRecallMiuixPage(
     onBack: () -> Unit
 ) {
     val sp = remember { HchatStorage.preferences(context, AntiRecallSettings.PREFS_NAME) }
-    var noticeText by remember {
-        mutableStateOf(
-            normalizeAntiRecallNoticeText(sp.getString(
-                AntiRecallSettings.KEY_NOTICE_TEXT,
-                AntiRecallSettings.DEFAULT_NOTICE_TEXT
-            ) ?: AntiRecallSettings.DEFAULT_NOTICE_TEXT)
-        )
-    }
-    var noticeTimeFormat by remember {
-        mutableStateOf(
-            sp.getString(
-                AntiRecallSettings.KEY_NOTICE_TIME_FORMAT,
-                AntiRecallSettings.DEFAULT_NOTICE_TIME_FORMAT
-            ) ?: AntiRecallSettings.DEFAULT_NOTICE_TIME_FORMAT
-        )
-    }
-    val usesTimeVariable = noticeText.contains(AntiRecallSettings.VAR_SEND_TIME) ||
-        noticeText.contains(AntiRecallSettings.VAR_RECALL_TIME)
     val listState = rememberLazyListState()
     val scrollBehavior = MiuixScrollBehavior()
 
     PageScaffold(
         title = provider.title(),
         largeTitle = provider.title(),
-        scrollBehavior = scrollBehavior,
-        bottomBar = {
-            BottomActionBar(
-                primaryText = "保存设置",
-                onPrimaryClick = save@{
-                    val normalizedTimeFormat = noticeTimeFormat.trim()
-                        .ifBlank { AntiRecallSettings.DEFAULT_NOTICE_TIME_FORMAT }
-                    val timeFormatValid = runCatching {
-                        SimpleDateFormat(normalizedTimeFormat, Locale.getDefault()).format(Date())
-                    }.isSuccess
-                    if (usesTimeVariable && !timeFormatValid) {
-                        Toast.makeText(context, "时间格式无效", Toast.LENGTH_SHORT).show()
-                        return@save
-                    }
-                    sp.edit()
-                        .putString(
-                            AntiRecallSettings.KEY_NOTICE_TEXT,
-                            noticeText.ifBlank { AntiRecallSettings.DEFAULT_NOTICE_TEXT }
-                        )
-                        .putString(
-                            AntiRecallSettings.KEY_NOTICE_TIME_FORMAT,
-                            if (timeFormatValid) {
-                                normalizedTimeFormat
-                            } else {
-                                AntiRecallSettings.DEFAULT_NOTICE_TIME_FORMAT
-                            }
-                        )
-                        .apply()
-                    Toast.makeText(context, "设置已保存", Toast.LENGTH_SHORT).show()
-                },
-                secondaryText = "返回",
-                onSecondaryClick = onBack
-            )
-        }
+        scrollBehavior = scrollBehavior
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -12785,7 +12734,7 @@ internal fun AntiRecallMiuixPage(
                         sp,
                         AntiRecallSettings.KEY_ENABLE,
                         "防撤回",
-                        "保留被撤回的消息，并在下方插入提示",
+                        "保留被撤回的消息，并在原消息旁显示已撤回标记",
                         AntiRecallSettings.DEFAULT_ENABLE
                     )
                     InsetDivider()
@@ -12800,26 +12749,10 @@ internal fun AntiRecallMiuixPage(
                     SwitchRow(
                         sp,
                         AntiRecallSettings.KEY_SHOW_NOTICE,
-                        "显示撤回提示",
-                        "在被撤回消息下方插入提示",
+                        "显示已撤回标记",
+                        "在原消息气泡旁显示“已撤回”标记",
                         AntiRecallSettings.DEFAULT_SHOW_NOTICE
                     )
-                    InsetDivider()
-                    VariableInputRow(
-                        title = "提示文案",
-                        summary = "点击下方变量插入到光标位置",
-                        value = noticeText,
-                        variables = antiRecallTemplateVariables,
-                        onValueChange = { noticeText = it }
-                    )
-                    if (usesTimeVariable) {
-                        InsetDivider()
-                        InputRow(
-                            "时间格式",
-                            "使用日期格式，例如 yyyy-MM-dd HH:mm:ss",
-                            noticeTimeFormat
-                        ) { noticeTimeFormat = it }
-                    }
                 }
             }
         }

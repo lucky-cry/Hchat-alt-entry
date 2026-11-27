@@ -104,6 +104,22 @@ class HchatExtraFeature : BaseFeature() {
 
     companion object {
         const val ID = "hchat_extra"
+
+        private val messageBindListeners =
+            java.util.concurrent.CopyOnWriteArrayList<(View, Any?) -> Unit>()
+
+        /** 其他功能可以监听聊天消息行绑定，用于在原消息上叠加标记。 */
+        fun addMessageBindListener(listener: (View, Any?) -> Unit): AutoCloseable {
+            messageBindListeners.add(listener)
+            return AutoCloseable { messageBindListeners.remove(listener) }
+        }
+
+        internal fun dispatchMessageBind(root: View, message: Any?) {
+            if (messageBindListeners.isEmpty()) return
+            messageBindListeners.forEach { listener ->
+                runCatching { listener(root, message) }
+            }
+        }
     }
 }
 
@@ -542,6 +558,9 @@ private class HchatExtraHooker(
                         val outer = stack?.lastOrNull { state.root != null && it.root === state.root }
                         if (outer != null && state.message != null) outer.message = state.message
                         if (stack?.isEmpty() == true) messageDetailsBindStates.remove()
+                        state.root?.let { root ->
+                            HchatExtraFeature.dispatchMessageBind(root, state.message)
+                        }
                         if (outer != null || !messageDetailsConfig.enabled || param.hasThrowable) return
                         runCatching {
                             bindBottomMessageDetails(

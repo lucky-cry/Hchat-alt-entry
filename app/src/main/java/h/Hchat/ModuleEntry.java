@@ -144,6 +144,7 @@ public class ModuleEntry {
                             try {
                                 ClassLoader groupLoader = resolveHostClassLoader(app, lpparam);
                                 ConversationGroupClickBridge.INSTANCE.installEarly(groupLoader);
+                                ConversationGroupClickBridge.INSTANCE.installIntentRedirect(groupLoader);
                                 ConversationGroupClickBridge.INSTANCE.installChattingRedirect(groupLoader);
                                 ConversationGroupClickBridge.INSTANCE.installChattingFragmentRedirect(groupLoader);
                                 ConversationGroupClickBridge.INSTANCE.installFragmentWatcher(groupLoader);

@@ -1,6 +1,15 @@
 package h.Hchat.hooks.items.antirecall
 
 import android.content.ContentValues
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.util.TypedValue
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.widget.TextView
 import h.Hchat.hooks.core.HookCallback
 import h.Hchat.hooks.core.HookParam
 import h.Hchat.dexkit.DexMethodCache
@@ -12,6 +21,7 @@ import h.Hchat.hooks.core.BaseFeature
 import h.Hchat.hooks.core.DexInstallScheduler
 import h.Hchat.hooks.core.FeatureContext
 import h.Hchat.hooks.core.HookRegistry
+import h.Hchat.hooks.items.hchatextra.HchatExtraFeature
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.utils.KavaReflector
 import java.lang.reflect.Method
@@ -19,6 +29,7 @@ import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
 import java.util.Locale
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import org.luckypray.dexkit.result.MethodData
 
@@ -28,7 +39,13 @@ class AntiRecallFeature : BaseFeature() {
     private val messageCache = ConcurrentHashMap<String, WeChatMessage>()
     private val selfRecallMsgIds = Collections.newSetFromMap(ConcurrentHashMap<Long, Boolean>())
     private val rawMessageRows = ConcurrentHashMap<Long, Map<String, Any>>()
-    private var methodCachePrefs: android.content.SharedPreferences? = null
+    private val recalledKeys = ConcurrentHashMap.newKeySet<String>()
+    private val boundMessageRows = Collections.synchronizedMap(WeakHashMap<View, Any?>())
+    private val styledRows = Collections.synchronizedMap(WeakHashMap<View, StyledRow>())
+    private val uiHandler = Handler(Looper.getMainLooper())
+    @Volatile private var featureContext: FeatureContext? = null
+    private var messageBindSubscription: AutoCloseable? = null
+    @Volatile private var methodCachePrefs: android.content.SharedPreferences? = null
     @Volatile private var revokeEntryInstalled = false
     @Volatile private var messageStorageHookInstalled = false
     @Volatile private var msgProcessingHookInstalled = false
@@ -43,13 +60,28 @@ class AntiRecallFeature : BaseFeature() {
     }
 
     override fun onFeatureInstall(context: FeatureContext) {
+        featureContext = context
         methodCachePrefs = DexMethodCache.prefs(context.hostContext(), "Hchat_anti_recall_method_cache")
+        recalledKeys.addAll(
+            HchatStorage.preferences(context.hostContext(), AntiRecallSettings.PREFS_NAME)
+                .getStringSet(AntiRecallSettings.KEY_RECALLED_KEYS, emptySet())
+                ?: emptySet()
+        )
+        messageBindSubscription = HchatExtraFeature.addMessageBindListener(::onMessageBound)
         installMessageCache()
         installSelfRecallUpdateHook(context)
         scheduleDexHooks(context)
         subscribe(Events.DexReady::class.java) {
             scheduleDexHooks(context)
         }
+    }
+
+    override fun onFeatureDestroy(context: FeatureContext) {
+        messageBindSubscription?.close()
+        messageBindSubscription = null
+        featureContext = null
+        boundMessageRows.clear()
+        styledRows.clear()
     }
 
     private fun scheduleDexHooks(context: FeatureContext) {
@@ -168,16 +200,169 @@ class AntiRecallFeature : BaseFeature() {
             return false
         }
         if (selfRecall) markSelfRecallMessage(recalledInfo)
-        if (selfRecall) {
-            if (showNoticeEnabled(context)) {
-                insertLocalNotice(context, talker, svrId, recalledInfo, recallTime, true)
-            }
-            return true
+        if (showNoticeEnabled(context)) {
+            markRecalledAndRefresh(context, talker, svrId, recalledInfo)
         }
-        if (!showNoticeEnabled(context)) return true
-        insertLocalNotice(context, talker, svrId, recalledInfo, recallTime, selfRecall)
         return true
     }
+
+    private fun markRecalledAndRefresh(
+        context: FeatureContext,
+        talker: String,
+        svrId: Long,
+        info: WeChatRecalledMessage?
+    ) {
+        val keys = recallLookupIds(svrId, info).map { "$talker:$it" }.toMutableSet()
+        keys.add("$talker:$svrId")
+        recalledKeys.addAll(keys)
+        trimRecalledKeys()
+        HchatStorage.preferences(context.hostContext(), AntiRecallSettings.PREFS_NAME)
+            .edit()
+            .putStringSet(AntiRecallSettings.KEY_RECALLED_KEYS, recalledKeys)
+            .apply()
+        uiHandler.post {
+            val rows = synchronized(boundMessageRows) { boundMessageRows.entries.toList() }
+            rows.forEach { (row, message) ->
+                val key = messageRecallKey(message)
+                if (key != null && recalledKeys.contains(key)) {
+                    styleRow(row, message)
+                }
+            }
+        }
+        h.Hchat.utils.HLog.e("$TAG 已标记撤回消息: talker=$talker keys=$keys")
+    }
+
+    private fun trimRecalledKeys() {
+        if (recalledKeys.size <= MAX_CACHED_MESSAGES) return
+        recalledKeys.take((recalledKeys.size - MAX_CACHED_MESSAGES).coerceAtLeast(0))
+            .forEach { recalledKeys.remove(it) }
+    }
+
+    private fun onMessageBound(root: View, message: Any?) {
+        if (featureContext == null) return
+        val key = messageRecallKey(message)
+        if (key == null) {
+            boundMessageRows.remove(root)
+            clearRowStyle(root)
+            return
+        }
+        boundMessageRows[root] = message
+        uiHandler.post {
+            if (boundMessageRows[root] !== message) return@post
+            if (recalledKeys.contains(key)) styleRow(root, message) else clearRowStyle(root)
+        }
+    }
+
+    private fun messageRecallKey(message: Any?): String? {
+        if (message == null) return null
+        val talker = (KavaReflector.readField(message, "field_talker")
+            ?: KavaReflector.readField(message, "talker")) as? String
+        val svrId = (KavaReflector.readField(message, "field_msgSvrId")
+            ?: KavaReflector.readField(message, "msgSvrId")) as? Number
+        if (talker.isNullOrBlank() || svrId == null || svrId.toLong() <= 0L) return null
+        return "$talker:${svrId.toLong()}"
+    }
+
+    private fun styleRow(row: View, message: Any?) {
+        val key = messageRecallKey(message) ?: return
+        if (!recalledKeys.contains(key)) {
+            clearRowStyle(row)
+            return
+        }
+        val content = findMessageContent(row) ?: row
+        val old = styledRows[row]
+        if (old != null && old.content === content) return
+        clearRowStyle(row)
+        content.alpha = 0.4f
+        val selfSent = (KavaReflector.readField(message, "field_isSend")
+            ?: KavaReflector.readField(message, "isSend")) as? Number
+        attachRecallBadge(row, content, selfSent?.toInt() == 1)
+    }
+
+    private fun clearRowStyle(row: View) {
+        val style = styledRows.remove(row) ?: return
+        runCatching {
+            (row.overlay as? android.view.ViewGroupOverlay)?.remove(style.badge)
+        }
+        runCatching { row.viewTreeObserver.removeOnPreDrawListener(style.preDraw) }
+        style.content.alpha = 1f
+    }
+
+    private fun findMessageContent(row: View): View? {
+        val holder = row.tag
+        if (holder != null) {
+            val method = KavaReflector.findMethodRecursive(holder.javaClass, "getMainContainerView")
+            val view = KavaReflector.invoke(method, holder) as? View
+            if (view != null) return view
+        }
+        return (row as? ViewGroup)?.let { findTaggedBubble(it) }
+    }
+
+    private fun findTaggedBubble(group: ViewGroup): View? {
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index) ?: continue
+            if (child.visibility == View.VISIBLE &&
+                child.tag?.javaClass?.name?.startsWith("com.tencent.mm.ui.chatting.viewitems") == true
+            ) {
+                return child
+            }
+            if (child is ViewGroup) findTaggedBubble(child)?.let { return it }
+        }
+        return null
+    }
+
+    private fun attachRecallBadge(row: View, content: View, selfSent: Boolean) {
+        val context = row.context
+        val badge = TextView(context).apply {
+            text = "已撤回"
+            textSize = 10f
+            setTextColor(Color.WHITE)
+            includeFontPadding = false
+            setPadding(dp(5f), dp(2f), dp(5f), dp(2f))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8f).toFloat()
+                setColor(0x99000000.toInt())
+            }
+        }
+        badge.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        badge.layout(0, 0, badge.measuredWidth, badge.measuredHeight)
+        (row.overlay as? android.view.ViewGroupOverlay)?.add(badge)
+        val preDraw = ViewTreeObserver.OnPreDrawListener {
+            positionRecallBadge(row, content, badge, selfSent)
+            true
+        }
+        row.viewTreeObserver.addOnPreDrawListener(preDraw)
+        styledRows[row] = StyledRow(content, badge, preDraw)
+    }
+
+    private fun positionRecallBadge(row: View, content: View, badge: TextView, selfSent: Boolean) {
+        if (!row.isAttachedToWindow || row.width <= 0) return
+        val rowLocation = IntArray(2)
+        val contentLocation = IntArray(2)
+        row.getLocationOnScreen(rowLocation)
+        content.getLocationOnScreen(contentLocation)
+        val contentLeft = contentLocation[0] - rowLocation[0]
+        val contentBottom = contentLocation[1] - rowLocation[1] + content.height
+        val gap = dp(4f).toFloat()
+        val maxX = (row.width - badge.measuredWidth).coerceAtLeast(0)
+        // 自己发送的消息头像在右侧，徽标必须放到气泡左侧，否则会盖住头像。
+        val x = if (selfSent) {
+            (contentLeft - gap - badge.measuredWidth).coerceIn(0f, maxX.toFloat())
+        } else {
+            (contentLeft + content.width + gap).coerceIn(0f, maxX.toFloat())
+        }
+        val y = (contentBottom - badge.measuredHeight)
+            .coerceIn(0, (row.height - badge.measuredHeight).coerceAtLeast(0)).toFloat()
+        badge.translationX = x
+        badge.translationY = y
+    }
+
+    private fun dp(value: Float): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+            android.content.res.Resources.getSystem().displayMetrics).toInt()
 
     private fun installMessageCache() {
         trackSubscription(WeChatApis.messageEvents()?.subscribeMessage { event ->
@@ -575,8 +760,20 @@ class AntiRecallFeature : BaseFeature() {
             recallTime,
             selfRecall
         )
-        val insertAt = if (targetCreateTime > 0L) {
-            targetCreateTime + 1L
+        val now = System.currentTimeMillis()
+        val insertAt = if (targetCreateTime > 0L &&
+            now - targetCreateTime in 0L..5_000L
+        ) {
+            // 原消息刚发出：插到原消息后面，聊天页仍会按新消息追加。
+            targetCreateTime + 1000L
+        } else if (targetCreateTime > 0L) {
+            // 微信聊天页只自动追加新时间的消息；旧时间插入虽然落库正确，
+            // 但当前会话不会刷新，表现为“没有提示”。先用当前时间保证可见。
+            h.Hchat.utils.HLog.e(
+                "$TAG 原消息时间较旧，提示改用当前时间保证可见: talker=$talker id=$svrId " +
+                    "origin=$targetCreateTime now=$now"
+            )
+            now
         } else {
             // 原消息已被撤回/缓存缺失时，旧逻辑直接放弃，用户就完全看不到提示。
             // 退回当前时间追加提示，至少保留“谁撤回了什么”。
@@ -1170,6 +1367,12 @@ class AntiRecallFeature : BaseFeature() {
         private const val MEDIA_RECALLED_MESSAGE_TYPE = 285222674
         private val NEVER_RESTORE_COLUMNS = setOf("rowid")
     }
+
+    private data class StyledRow(
+        val content: View,
+        val badge: TextView,
+        val preDraw: ViewTreeObserver.OnPreDrawListener
+    )
 
     private data class RevokeEntry(
         val method: Method,
