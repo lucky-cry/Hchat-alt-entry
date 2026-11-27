@@ -371,7 +371,10 @@ public class DexFinder {
             }
             if (repaired) {
                 // 修复后仍不完整时禁止写回；下一次启动会整份重新解析。
-                if (criticalCacheValid()) saveCache();
+                if (criticalCacheValid()) {
+                    resolvedAll = true;
+                    saveCache();
+                }
             }
             if (criticalCacheValid()) {
                 logDetail("命中缓存: " + shortKey(runtimeCacheKey));
@@ -427,8 +430,8 @@ public class DexFinder {
         resolveProtobufPacketApi();
         resolveEcsGiftApi();
         logMissingCritical();
-        saveCache();
         resolvedAll = true;
+        saveCache();
         logDetail("解析完成并缓存: " + shortKey(runtimeCacheKey));
     }
 
@@ -455,7 +458,7 @@ public class DexFinder {
         }
         if (!isSendTextRequestApiValid()) issues.add("sendText");
         if (!isSendImageMethod(sendImageMethod)) issues.add("sendImage");
-        if (sendVideoMethod == null) issues.add("sendVideo");
+        // sendVideo 在 8.0.80 可能缺少独立高层入口（视频走其他链路），不作为整份缓存作废条件。
         if (serviceGetterMethod == null || !isServiceGetterMethod(serviceGetterMethod)) {
             issues.add("serviceGetter");
         }
@@ -467,6 +470,13 @@ public class DexFinder {
 
     private boolean criticalCacheValid() {
         return criticalCacheIssues().isEmpty();
+    }
+
+    /** 可选 locator：失败只记录，不阻塞整份缓存。 */
+    private List<String> optionalCacheIssues() {
+        List<String> issues = new ArrayList<>();
+        if (sendVideoMethod == null) issues.add("sendVideo");
+        return issues;
     }
 
     /** 缓存作废后清掉关键字段，确保接下来的全量解析不会因旧值短路。 */
@@ -1687,6 +1697,17 @@ public class DexFinder {
                     sendVideoMethod = method;
                     break;
                 } catch (Throwable ignored) {}
+            }
+            if (sendVideoMethod == null) {
+                // 8.0.80 已无 "send vedio args error" 锚点；lt5.d5#Wj 是视频发送入口。
+                Class<?> known = KavaReflector.loadClass("lt5.d5", classLoader);
+                if (known != null) {
+                    for (Method method : KavaReflector.declaredMethods(known)) {
+                        if (!"Wj".equals(method.getName()) || !isSendVideoMethod(method)) continue;
+                        sendVideoMethod = KavaReflector.accessible(method);
+                        break;
+                    }
+                }
             }
 
             logDetail("视频发送方法: " + methodName(sendVideoMethod));
@@ -5137,10 +5158,19 @@ public class DexFinder {
 
     private void saveCache() {
         if (cachePrefs == null || runtimeCacheKey.length() == 0) return;
+        // P0/P1：只在整轮解析完成后校验并写缓存；中途的局部保存直接跳过。
+        if (!resolvedAll) {
+            logDetail("解析尚未完成，跳过缓存写入");
+            return;
+        }
         // P1：关键 locator 未全部就绪时不写任何快照，避免负缓存跨启动复用。
         if (!criticalCacheValid()) {
             h.Hchat.utils.HLog.e(TAG + " 关键 locator 未全部就绪，跳过缓存写入: " + criticalCacheIssues());
             return;
+        }
+        List<String> optionalIssues = optionalCacheIssues();
+        if (!optionalIssues.isEmpty()) {
+            logDetail("可选 locator 未解析，不阻塞缓存: " + optionalIssues);
         }
         try {
             SharedPreferences.Editor editor = cachePrefs.edit().clear();
