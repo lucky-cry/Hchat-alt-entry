@@ -1859,20 +1859,22 @@ object ConversationGroupRuntime {
             }
             try {
                 val state = loadConversationParents(database, emptySet())
+                val official = state.officialIds(originals)
                 val plan = ConversationGroupParentPolicy.plan(
                     assigned = emptyMap(),
                     current = state.parents,
-                    protected = emptySet(),
+                    protected = official,
                     originals = originals
                 )
                 if (!isRuntimeGenerationActive(generation)) return
-                val parentUpdatesSucceeded = applyParentPlan(database, prefs, account, plan)
+                val restored = applyParentPlan(database, prefs, account, plan)
+                if (!isRuntimeGenerationActive(generation) ||
+                    ConversationGroupStore.accountKey() != account
+                ) return
                 // 虚拟分组行是分组归属的唯一宿主。必须等所有真实会话的
                 // parentRef 恢复成功后再删除，否则恢复失败会永久丢失成员关系。
                 if (plan.unresolved.isEmpty() &&
-                    parentUpdatesSucceeded.containsAll(plan.updates.keys) &&
-                    isRuntimeGenerationActive(generation) &&
-                    ConversationGroupStore.accountKey() == account &&
+                    restored.containsAll(plan.updates.keys) &&
                     !ConversationGroupStore.isEnabled(context)
                 ) {
                     cleanupVirtualRows(database, emptySet())

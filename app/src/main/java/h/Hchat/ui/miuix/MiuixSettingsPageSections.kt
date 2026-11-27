@@ -15489,6 +15489,8 @@ fun ScriptPluginAgentWorkspacePage(
     var apiBase by remember { mutableStateOf(savedConfig.apiBaseUrl) }
     var endpointMode by remember { mutableStateOf(savedConfig.endpointMode) }
     var apiKey by remember { mutableStateOf(savedConfig.apiKey) }
+    var customHeaders by remember { mutableStateOf(savedConfig.customHeaders) }
+    var allowAuthHeaderOverride by remember { mutableStateOf(savedConfig.allowAuthHeaderOverride) }
     var model by remember { mutableStateOf(savedConfig.model) }
     var reasoningEffort by remember { mutableStateOf(savedConfig.reasoningEffort) }
     var mcpServers by remember { mutableStateOf(savedConfig.mcpServers) }
@@ -15615,6 +15617,8 @@ fun ScriptPluginAgentWorkspacePage(
             apiBaseUrl = ScriptPluginAgentSettings.normalizedApiAddress(apiBase, endpointMode),
             apiPath = "",
             apiKey = apiKey.trim(),
+            customHeaders = customHeaders,
+            allowAuthHeaderOverride = allowAuthHeaderOverride,
             model = model.trim(),
             mcpServers = mcpServers,
             autoCompactEnabled = autoCompactEnabled,
@@ -15644,6 +15648,8 @@ fun ScriptPluginAgentWorkspacePage(
         apiBase = profile.config.apiBaseUrl
         endpointMode = profile.config.endpointMode
         apiKey = profile.config.apiKey
+        customHeaders = profile.config.customHeaders
+        allowAuthHeaderOverride = profile.config.allowAuthHeaderOverride
         model = profile.config.model
         reasoningEffort = profile.config.reasoningEffort
         mcpServers = profile.config.mcpServers
@@ -17944,6 +17950,12 @@ fun ScriptPluginAgentWorkspacePage(
                 apiBase = apiBase,
                 endpointMode = endpointMode,
                 apiKey = apiKey,
+                customHeaders = customHeaders,
+                allowAuthHeaderOverride = allowAuthHeaderOverride,
+                onRequestHeadersChange = { headers, allowOverride ->
+                    customHeaders = headers
+                    allowAuthHeaderOverride = allowOverride
+                },
                 model = model,
                 reasoningEffort = reasoningEffort,
                 mcpServers = mcpServers,
@@ -18134,6 +18146,9 @@ internal fun ScriptPluginAgentConfigPage(
     apiBase: String,
     endpointMode: String,
     apiKey: String,
+    customHeaders: Map<String, String>,
+    allowAuthHeaderOverride: Boolean,
+    onRequestHeadersChange: (Map<String, String>, Boolean) -> Unit,
     model: String,
     reasoningEffort: String,
     mcpServers: List<ScriptPluginAgentMcpServer>,
@@ -18173,6 +18188,7 @@ internal fun ScriptPluginAgentConfigPage(
     onSave: () -> Unit,
     onBack: () -> Unit
 ) {
+    var showRequestHeaders by remember(activeProfileId) { mutableStateOf(false) }
     var profileDialog by remember { mutableStateOf("") }
     var profileNameDraft by remember(activeProfileName, profileDialog) {
         mutableStateOf(if (profileDialog == "rename") activeProfileName else "")
@@ -18187,6 +18203,17 @@ internal fun ScriptPluginAgentConfigPage(
         ScriptPluginAgentSettings.requestUrl(apiBase, endpointMode, model)
     }
 
+    if (showRequestHeaders) {
+        ScriptPluginAgentRequestHeadersDialog(
+            headers = customHeaders,
+            allowOverride = allowAuthHeaderOverride,
+            onApply = { headers, allowOverride ->
+                onRequestHeadersChange(headers, allowOverride)
+                showRequestHeaders = false
+            },
+            onDismiss = { showRequestHeaders = false }
+        )
+    }
     if (profileDialog.isNotBlank()) {
         WindowDialog(
             show = true,
@@ -18510,7 +18537,14 @@ internal fun ScriptPluginAgentConfigPage(
                             ScriptPluginAgentEndpointPreview(resolvedEndpoint)
                         }
                         InsetDivider()
-                        InputRow("API Key", "留空表示接口不需要密钥", apiKey, onValueChange = onApiKeyChange)
+                        InputRow("API Key", "可留空，或通过自定义请求头鉴权", apiKey, onValueChange = onApiKeyChange)
+                        InsetDivider()
+                        ActionRow(
+                            "自定义请求头",
+                            if (customHeaders.isEmpty()) "未设置" else {
+                                "${customHeaders.size} 项 · ${if (allowAuthHeaderOverride) "允许覆盖鉴权头" else "仅追加"}"
+                            }
+                        ) { showRequestHeaders = true }
                         InsetDivider()
                         InputRow("模型 ID", "可直接填写，无需先获取模型列表", model, onValueChange = onModelChange)
                         InsetDivider()

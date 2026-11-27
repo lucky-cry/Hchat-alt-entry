@@ -47,7 +47,7 @@ internal object ScriptPluginAgentProviderAdapter {
 
     fun headers(config: ScriptPluginAgentConfig): Map<String, String> {
         val key = config.apiKey.trim()
-        return when (config.endpointMode) {
+        val defaults = when (config.endpointMode) {
             ScriptPluginAgentSettings.ENDPOINT_MODE_ANTHROPIC -> buildMap {
                 put("anthropic-version", "2023-06-01")
                 if (key.isNotBlank()) put("x-api-key", key)
@@ -59,6 +59,7 @@ internal object ScriptPluginAgentProviderAdapter {
                 if (key.isNotBlank()) put("Authorization", "Bearer $key")
             }
         }
+        return ScriptPluginAgentRequestHeaders.merge(defaults, config)
     }
 
     fun nativeStreamDelta(config: ScriptPluginAgentConfig, root: JSONObject): StreamDelta? {

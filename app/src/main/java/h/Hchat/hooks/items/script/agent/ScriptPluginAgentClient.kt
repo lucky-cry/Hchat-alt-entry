@@ -85,6 +85,11 @@ object ScriptPluginAgentClient {
             .build()
     }
 
+    private val noRedirectHttpClient by lazy { httpClient.newBuilder().followRedirects(false).build() }
+
+    private fun modelHttpClient(config: ScriptPluginAgentConfig): OkHttpClient =
+        if (config.customHeaders.isEmpty()) httpClient else noRedirectHttpClient
+
     fun generate(
         context: Context,
         config: ScriptPluginAgentConfig,
@@ -1663,7 +1668,7 @@ object ScriptPluginAgentClient {
             stream = true,
             promptCacheEnabled = anthropicPromptCacheEnabled
         )
-        val call = httpClient.newCall(
+        val call = modelHttpClient(config).newCall(
             Request.Builder()
                 .url(finalUrl(config, stream = true))
                 .addHeader("Content-Type", "application/json")
@@ -3305,7 +3310,7 @@ object ScriptPluginAgentClient {
                 ?: candidateModelUrls(ScriptPluginAgentSettings.requestUrl(config, stream = false))
             for (url in urls) {
                 val models = runCatching {
-                    httpClient.newCall(
+                    modelHttpClient(config).newCall(
                         Request.Builder()
                             .url(url)
                             .addHeader("Content-Type", "application/json")
@@ -3619,7 +3624,7 @@ object ScriptPluginAgentClient {
             stream = false,
             promptCacheEnabled = anthropicPromptCacheEnabled
         )
-        val call = httpClient.newCall(
+        val call = modelHttpClient(config).newCall(
             Request.Builder()
                 .url(finalUrl(config, stream = false))
                 .addHeader("Content-Type", "application/json")

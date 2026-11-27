@@ -24,7 +24,52 @@ private fun checkEfforts(mode: String, model: String, expected: List<String>) {
     check(ScriptPluginAgentReasoning.options(mode, model).map { it.first } == listOf("default") + expected)
 }
 
+private fun checkCustomRequestHeaders() {
+    val compatible = ScriptPluginAgentSettings.ENDPOINT_MODE_OPENAI_COMPATIBLE
+    val input = "X-Tenant-Id: demo\r\nauthorization: Basic sample:with:colons"
+    val custom = ScriptPluginAgentRequestHeaders.parse(input)
+    val base = config(compatible, "demo").copy(apiKey = "example-key", customHeaders = custom)
+    val append = ScriptPluginAgentProviderAdapter.headers(base)
+    check(append.entries.single { it.key.equals("Authorization", true) }.value == "Bearer example-key")
+    check(append["X-Tenant-Id"] == "demo")
+    val override = base.copy(allowAuthHeaderOverride = true)
+    for (stream in listOf(true, false)) {
+        val headers = ScriptPluginAgentProviderAdapter.prepare(override, body(), stream).headers
+        check(headers.entries.single { it.key.equals("Authorization", true) }.value == "Basic sample:with:colons")
+        check(headers["X-Tenant-Id"] == "demo")
+    }
+    check(ScriptPluginAgentProviderAdapter.headers(base.copy(apiKey = ""))["authorization"] == "Basic sample:with:colons")
+    val nativeAuth = mapOf(
+        ScriptPluginAgentSettings.ENDPOINT_MODE_ANTHROPIC to "X-API-Key",
+        ScriptPluginAgentSettings.ENDPOINT_MODE_GEMINI to "X-Goog-Api-Key"
+    )
+    for ((mode, name) in nativeAuth) {
+        val native = base.copy(endpointMode = mode, customHeaders = mapOf(name to "custom-key"))
+        check(ScriptPluginAgentProviderAdapter.headers(native).entries.single { it.key.equals(name, true) }.value == "example-key")
+        check(ScriptPluginAgentProviderAdapter.headers(native.copy(allowAuthHeaderOverride = true))
+            .entries.single { it.key.equals(name, true) }.value == "custom-key")
+    }
+    for (text in listOf("invalid", "Bad Name: value", "Wrong\tName: v", "X-Name: v\rInjected: a",
+        "X-Dup: a\nx-dup: b", "Host: another.test", "Content-Length: 1", "Content-Type: text/plain")) {
+        check(runCatching { ScriptPluginAgentRequestHeaders.parse(text) }.isFailure)
+    }
+    check(ScriptPluginAgentRequestHeaders.parse("  \n").isEmpty())
+
+    val context = Context()
+    val initial = ScriptPluginAgentSettings.loadActiveProfile(context)
+    check(initial.config.customHeaders.isEmpty() && !initial.config.allowAuthHeaderOverride)
+    ScriptPluginAgentSettings.save(context, initial.config.copy(
+        apiBaseUrl = "https://example.test", customHeaders = custom, allowAuthHeaderOverride = true
+    ))
+    val other = ScriptPluginAgentSettings.createProfile(context, "另一套请求头配置")
+    val switched = ScriptPluginAgentSettings.setActiveProfile(context, other.id)
+    check(switched.config.customHeaders.isEmpty() && !switched.config.allowAuthHeaderOverride)
+    val restored = ScriptPluginAgentSettings.setActiveProfile(context, initial.id)
+    check(restored.config.customHeaders == custom && restored.config.allowAuthHeaderOverride)
+}
+
 fun main() {
+    checkCustomRequestHeaders()
     val openai = ScriptPluginAgentSettings.ENDPOINT_MODE_OPENAI
     val compatible = ScriptPluginAgentSettings.ENDPOINT_MODE_OPENAI_COMPATIBLE
     val custom = ScriptPluginAgentSettings.ENDPOINT_MODE_CUSTOM_URL

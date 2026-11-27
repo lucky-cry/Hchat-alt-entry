@@ -260,6 +260,7 @@ import h.Hchat.hooks.items.customfriendavatar.CustomFriendAvatarStore
 import h.Hchat.hooks.items.customnotify.CustomNotificationSettings
 import h.Hchat.hooks.items.editmsg.EditMessageFeature
 import h.Hchat.hooks.items.editmsg.EditMessageSettings
+import h.Hchat.hooks.items.emojilimit.EmojiCollectionLimitFeature
 import h.Hchat.hooks.items.emojisave.EmojiSaveFeature
 import h.Hchat.hooks.items.emojisave.EmojiSaveSettings
 import h.Hchat.hooks.items.fakelocation.FakeLocationFeature
@@ -502,6 +503,7 @@ import h.Hchat.hooks.items.hchatextra.HchatExtraSettings
 import h.Hchat.hooks.items.voicepreview.VoicePreviewFeature
 import h.Hchat.hooks.items.voicepreview.VoicePreviewSettings
 import h.Hchat.media.AudioTransformBridge
+import h.Hchat.preferences.ConfigStore
 import h.Hchat.preferences.HchatStorage
 import h.Hchat.preferences.TermsGate
 import h.Hchat.ui.FeatureSettingsProvider
@@ -3128,6 +3130,7 @@ internal fun practicalFeatureGroups(
                 QuoteDeleteClearFeature.ID,
                 SwipeQuoteFeature.ID,
                 EmojiSaveFeature.ID,
+                EmojiCollectionLimitFeature.ID,
                 CallMediaLimitFeature.ID,
                 CallRingtoneBlockFeature.ID
             )
@@ -3867,6 +3870,7 @@ internal fun featureSubSearchTerms(featureId: String): List<String> {
         GroupMemberHistorySettingsProvider.FEATURE_ID -> listOf("历史发言记录", "群成员历史发言", "群成员资料")
         AtAllNotificationBlockFeature.ID -> listOf("屏蔽艾特所有人", "屏蔽@所有人", "艾特全体", "通知拦截")
         QuoteDeleteClearFeature.ID -> listOf("删除键清引用", "清除引用", "引用消息", "删除引用")
+        EmojiCollectionLimitFeature.ID -> listOf("表情收藏", "收藏上限", "5000")
         EmojiSaveFeature.ID -> listOf("保存表情", "表情保存", "动画表情", "长按菜单", "本地文件")
         SwipeQuoteFeature.ID -> listOf("滑动手势", "左滑引用", "右滑复读", "长按复读", "菜单复读", "+1", "复读语音", "语音时长", "滑动距离")
         CallMediaLimitFeature.ID -> listOf("通话媒体限制", "语音通话", "视频通话", "播放语音", "查看视频", "打开拍摄")
@@ -4697,6 +4701,15 @@ internal fun FeatureSettingsPage(
         WeChatKeepAliveFeature.ID -> WeChatKeepAliveMiuixPage(context, provider, onBack)
         QuoteDeleteClearFeature.ID -> QuoteDeleteClearMiuixPage(context, provider, onBack)
         EmojiSaveFeature.ID -> EmojiSaveMiuixPage(context, provider, onBack)
+        EmojiCollectionLimitFeature.ID -> HchatExtraToggleMiuixPage(
+            context = context,
+            provider = provider,
+            key = EmojiCollectionLimitFeature.KEY_ENABLED,
+            defaultValue = EmojiCollectionLimitFeature.DEFAULT_ENABLED,
+            summary = "将本机收藏上限提高到 5000。仅支持微信 8.0.80（3220），云同步仍受微信限制。",
+            onBack = onBack,
+            useFeaturePrefs = true
+        )
         SwipeQuoteFeature.ID -> SwipeQuoteMiuixPage(context, provider, onBack)
         AudioTransformFeature.ID -> AudioTransformSettingsPage(context, provider, onBack)
         TextVoiceFeature.ID -> TextVoiceMiuixPage(context, provider, onBack)
@@ -9226,9 +9239,13 @@ internal fun HchatExtraToggleMiuixPage(
     key: String,
     defaultValue: Boolean,
     summary: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    useFeaturePrefs: Boolean = false
 ) {
-    val sp = remember { HchatStorage.preferences(context, HchatExtraSettings.PREFS_NAME) }
+    val sp = remember(context, provider.featureId(), useFeaturePrefs) {
+        if (useFeaturePrefs) ConfigStore(context).getFeaturePrefs(provider.featureId())
+        else HchatStorage.preferences(context, HchatExtraSettings.PREFS_NAME)
+    }
     val listState = rememberLazyListState()
     val scrollBehavior = MiuixScrollBehavior()
 

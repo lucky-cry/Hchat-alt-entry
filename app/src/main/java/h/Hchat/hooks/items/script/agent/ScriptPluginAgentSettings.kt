@@ -338,6 +338,8 @@ object ScriptPluginAgentSettings {
             put("apiKey", normalized.apiKey)
             put("model", normalized.model)
             put("reasoningEffort", normalized.reasoningEffort)
+            put("customHeaders", JSONObject(normalized.customHeaders))
+            put("allowAuthHeaderOverride", normalized.allowAuthHeaderOverride)
             put("mcpEnabled", legacyMcp?.enabled == true)
             put("mcpEndpoint", legacyMcp?.endpoint.orEmpty())
             put("mcpAuthorization", legacyMcp?.authorization.orEmpty())
@@ -388,6 +390,15 @@ object ScriptPluginAgentSettings {
                 apiKey = json.optString("apiKey", ""),
                 model = json.optString("model", DEFAULT_MODEL),
                 reasoningEffort = json.optString("reasoningEffort", "default"),
+                customHeaders = json.optJSONObject("customHeaders")?.let { headers ->
+                    buildMap {
+                        for (name in headers.keys()) {
+                            val value = headers.opt(name) as? String ?: continue
+                            put(name, value)
+                        }
+                    }
+                }.orEmpty(),
+                allowAuthHeaderOverride = json.optBoolean("allowAuthHeaderOverride", false),
                 mcpServers = servers,
                 autoCompactEnabled = json.optBoolean("autoCompactEnabled", true),
                 compactTokenThreshold = json.optInt(

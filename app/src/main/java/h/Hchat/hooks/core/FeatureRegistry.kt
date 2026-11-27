@@ -18,6 +18,7 @@ import h.Hchat.hooks.items.custombottombar.CustomBottomBarFeature
 import h.Hchat.hooks.items.customfriendavatar.CustomFriendAvatarFeature
 import h.Hchat.hooks.items.customnotify.CustomNotificationFeature
 import h.Hchat.hooks.items.editmsg.EditMessageFeature
+import h.Hchat.hooks.items.emojilimit.EmojiCollectionLimitFeature
 import h.Hchat.hooks.items.emojisave.EmojiSaveFeature
 import h.Hchat.hooks.items.fakelocation.FakeLocationFeature
 import h.Hchat.hooks.items.fakescancamera.FakeScanCameraFeature
@@ -185,6 +186,7 @@ object FeatureRegistry {
             .register(RemoveMomentsAdsFeature())
             .register(EditMessageFeature())
             .register(EmojiSaveFeature())
+            .register(EmojiCollectionLimitFeature())
             .register(VoicePreviewFeature())
             .register(VoiceForwardFeature())
             .register(SelectedMessagesFeature())

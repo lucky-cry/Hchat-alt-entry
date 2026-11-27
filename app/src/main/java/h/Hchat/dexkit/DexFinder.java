@@ -3882,10 +3882,12 @@ public class DexFinder {
     }
 
     // ============ DexKit 结果缓存 ============
-    private boolean ensureSnapshotLoaded() {
+    private synchronized boolean ensureSnapshotLoaded() {
         if (resolvedAll) return true;
         if (cacheLoadAttempted) return false;
-        return loadCache();
+        if (!loadCache()) return false;
+        resolvedAll = true;
+        return true;
     }
 
     private boolean loadCache() {

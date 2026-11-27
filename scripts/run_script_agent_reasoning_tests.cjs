@@ -36,7 +36,7 @@ const tests = 'scripts/tests/script_agent_reasoning/';
 run(['-Xmx256m', '-cp', compiler.join(path.delimiter), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
     '-no-stdlib', '-no-reflect', '-classpath', [stdlib, json].join(path.delimiter), '-d', artifact,
     ...['ScriptPluginAgentModels.kt', 'ScriptPluginAgentSettings.kt', 'ScriptPluginAgentProviderAdapter.kt',
-        'ScriptPluginAgentReasoning.kt'].map(file => source + file),
+        'ScriptPluginAgentReasoning.kt', 'ScriptPluginAgentRequestHeaders.kt'].map(file => source + file),
     ...fs.readdirSync(path.join(root, tests)).filter(file => file.endsWith('.kt')).map(file => tests + file)]);
 run(['-cp', [artifact, stdlib, json].join(path.delimiter), 'h.Hchat.hooks.items.script.agent.ReasoningRegressionKt']);
 console.log('Test artifacts: ' + output);

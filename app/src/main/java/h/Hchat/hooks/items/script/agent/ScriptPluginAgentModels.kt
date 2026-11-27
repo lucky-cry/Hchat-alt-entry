@@ -20,7 +20,9 @@ data class ScriptPluginAgentConfig(
     val workspaceWriteApprovalMode: String = ScriptPluginAgentSettings.WRITE_APPROVAL_ASK,
     val promptCacheMode: String = ScriptPluginAgentSettings.DEFAULT_PROMPT_CACHE_MODE,
     val endpointMode: String = ScriptPluginAgentSettings.ENDPOINT_MODE_OPENAI_COMPATIBLE,
-    val reasoningEffort: String = "default"
+    val reasoningEffort: String = "default",
+    val customHeaders: Map<String, String> = emptyMap(),
+    val allowAuthHeaderOverride: Boolean = false
 )
 
 data class ScriptPluginAgentMcpServer(

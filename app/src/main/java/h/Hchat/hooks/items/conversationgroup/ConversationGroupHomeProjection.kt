@@ -36,6 +36,8 @@ internal object ConversationGroupHomeProjection {
     private val installed = ConcurrentHashMap.newKeySet<Member>()
     private val legacyDepth = ThreadLocal<Int>()
     private val refreshers = Collections.synchronizedMap(WeakHashMap<Any, Refresh>())
+    private val deferredRefreshers = WeakHashMap<Any, Installation>()
+    private var refreshOnNextCapture: Installation? = null
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var hiddenIds: () -> Set<String> = { emptySet() }
     @Volatile private var legacyStorage: WeakReference<Any>? = null
@@ -302,7 +304,9 @@ internal object ConversationGroupHomeProjection {
                 }
             }, installation)
         }
-        updates.forEach { update -> hook(update, object : HookCallback {
+        updates.forEach { update ->
+            installModernBindingHook(update, installation)
+            hook(update, object : HookCallback {
             override fun before(param: HookParam) {
                 val argument = param.args?.getOrNull(0)
                 captureRefresh(installation, param.thisObject ?: return, Refresh(
@@ -325,10 +329,66 @@ internal object ConversationGroupHomeProjection {
         true
     }.getOrElse { HLog.e("$TAG 安装首页投影失败", it); false }
 
+    private fun installModernBindingHook(update: Method, installation: Installation) {
+        val types = update.parameterTypes
+        if (types.size != 3 || types[0] == Integer.TYPE) return
+        val bindings = KavaReflector.declaredMethods(update.declaringClass).filter {
+            !Modifier.isStatic(it.modifiers) && !Modifier.isAbstract(it.modifiers) &&
+                it.returnType == Void.TYPE && it.parameterTypes.contentEquals(arrayOf(types[0]))
+        }
+        check(bindings.size == 1) { "首页原生列表绑定通知候选数异常: ${bindings.size}" }
+        hook(bindings.single(), object : HookCallback {
+            override fun after(param: HookParam) {
+                if (param.hasThrowable) return
+                val argument = param.args?.firstOrNull()?.takeIf(types[0]::isInstance) ?: return
+                captureRefresh(
+                    installation,
+                    param.thisObject ?: return,
+                    Refresh(update, WeakReference(argument))
+                )
+            }
+        }, installation)
+    }
+
     private fun captureRefresh(installation: Installation, owner: Any, refresh: Refresh): Boolean = synchronized(lifecycleLock) {
         if (!isActive(installation)) return false
-        refreshers[owner] = refresh
+        val previous = refreshers[owner]
+        refreshers[owner] = if (refresh.argument == null && previous?.method == refresh.method &&
+            previous.argument?.get() != null
+        ) previous else refresh
+        val retry = deferredRefreshers.remove(owner) == installation || refreshOnNextCapture == installation
+        if (refreshOnNextCapture == installation) refreshOnNextCapture = null
+        if (retry) refresh(installation)
         true
+    }
+
+    private fun deferRefresh(installation: Installation, owner: Any) = synchronized(lifecycleLock) {
+        if (isActive(installation)) deferredRefreshers[owner] = installation
+    }
+
+    private fun claimRefresh(installation: Installation, owner: Any): Boolean = synchronized(lifecycleLock) {
+        if (!isActive(installation)) return@synchronized false
+        deferredRefreshers.remove(owner)
+        true
+    }
+
+    private fun resolveModernRefreshArgument(owner: Any, refresh: Refresh): Any? {
+        val expected = refresh.method.parameterTypes[0]
+        var ownerHasField = false
+        var nativeList: Any? = null
+        var type: Class<*>? = owner.javaClass
+        while (type != null) {
+            KavaReflector.declaredFields(type).forEach { field ->
+                if (!Modifier.isStatic(field.modifiers) && field.type == expected) {
+                    ownerHasField = true
+                    val value = KavaReflector.readField(field, owner) ?: return@forEach
+                    check(nativeList == null || nativeList === value) { "首页对象存在多个不同的原生列表" }
+                    nativeList = value
+                }
+            }
+            type = type.superclass
+        }
+        return if (ownerHasField) nativeList else refresh.argument?.get()?.takeIf(expected::isInstance)
     }
 
     private fun requestTabRefresh(installation: Installation): Unit = synchronized(lifecycleLock) {
@@ -440,21 +500,36 @@ internal object ConversationGroupHomeProjection {
                 val current = synchronized(lifecycleLock) {
                     if (refreshTask !== this || !isActive(installation)) return
                     refreshTask = null
-                    synchronized(refreshers) { refreshers.entries.map { it.key to it.value } }
+                    refreshPending.set(false)
+                    synchronized(refreshers) { refreshers.entries.map { it.key to it.value } }.also {
+                        if (it.isEmpty()) refreshOnNextCapture = installation
+                    }
                 }
                 current.forEach { (owner, refresh) ->
                     if (!isActive(installation)) return@forEach
                     runCatching {
                         val types = refresh.method.parameterTypes
-                        when {
-                            types.size == 2 -> KavaReflector.invokeOrThrow(refresh.method, owner, 5, "")
-                            types[0] == Integer.TYPE -> legacyStorage?.get()?.takeIf(types[1]::isInstance)?.let {
-                                KavaReflector.invokeOrThrow(refresh.method, owner, 5, it, "")
+                        val arguments = when {
+                            types.size == 2 -> arrayOf<Any>(5, "")
+                            types[0] == Integer.TYPE -> {
+                                val storage = legacyStorage?.get()?.takeIf(types[1]::isInstance)
+                                if (storage == null) {
+                                    deferRefresh(installation, owner)
+                                    return@runCatching
+                                }
+                                arrayOf(5, storage, "")
                             }
-                            else -> refresh.argument?.get()?.let {
-                                KavaReflector.invokeOrThrow(refresh.method, owner, it, 5, "")
+                            else -> {
+                                val argument = resolveModernRefreshArgument(owner, refresh)
+                                if (argument == null) {
+                                    deferRefresh(installation, owner)
+                                    return@runCatching
+                                }
+                                arrayOf(argument, 5, "")
                             }
                         }
+                        if (!claimRefresh(installation, owner)) return@runCatching
+                        KavaReflector.invokeOrThrow(refresh.method, owner, *arguments)
                     }.onFailure { HLog.e("$TAG 刷新首页投影失败", it) }
                 }
                 val rerun = synchronized(lifecycleLock) {
@@ -480,6 +555,8 @@ internal object ConversationGroupHomeProjection {
         lifecycleGeneration++
         installed.clear()
         refreshers.clear()
+        deferredRefreshers.clear()
+        refreshOnNextCapture = null
         legacyStorage = null
         hiddenIds = { emptySet() }
         tabFilter = { null }
