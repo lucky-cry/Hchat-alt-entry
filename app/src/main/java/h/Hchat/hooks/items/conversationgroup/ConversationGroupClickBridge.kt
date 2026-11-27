@@ -54,6 +54,7 @@ internal object ConversationGroupClickBridge {
     private val activeGroupTalkers = Collections.synchronizedMap(WeakHashMap<Activity, String>())
     private val closedGroupPages = Collections.synchronizedMap(WeakHashMap<Activity, Boolean>())
     private val pendingUserTalkers = Collections.synchronizedSet(HashSet<String>())
+    private val nativeGroupTalkers = Collections.synchronizedSet(HashSet<String>())
     private val avatarClient by lazy { OkHttpClient() }
     private val avatarCache = ConcurrentHashMap<String, Bitmap>()
     private val avatarExecutor = Executors.newFixedThreadPool(2)
@@ -246,7 +247,16 @@ internal object ConversationGroupClickBridge {
                             "com.tencent.mm.ui.conversation.ConvBoxServiceConversationUI"
                         )
                     ) {
+                        nativeGroupTalkers.add(talker)
                         HLog.e("$TAG 原生分组页使用原生列表: talker=$talker")
+                        return@after
+                    }
+                    // 已经走过原生分组页的虚拟分组，后续不要再回退到自绘浮层。
+                    // 否则返回首页/再次打开时会被 ChattingUIFragment 的旧兜底覆盖。
+                    if (talker in nativeGroupTalkers &&
+                        fragment.javaClass.name == "com.tencent.mm.ui.chatting.ChattingUIFragment"
+                    ) {
+                        HLog.e("$TAG 已使用原生分组页，跳过后台 ChattingUIFragment 浮层: talker=$talker")
                         return@after
                     }
                     // ConvBoxServiceConversationUI 内部也可能挂载 ChattingUIFragment；
@@ -426,7 +436,12 @@ internal object ConversationGroupClickBridge {
             HLog.e("$TAG ChattingUIProxy 命中虚拟分组: talker=$talker")
             pendingUserTalkers.add(talker)
             if (activity.javaClass.name.contains("ConvBoxServiceConversationUI")) {
+                nativeGroupTalkers.add(talker)
                 HLog.e("$TAG 原生分组页内跳过自绘浮层: proxy talker=$talker")
+                return
+            }
+            if (talker in nativeGroupTalkers) {
+                HLog.e("$TAG 已使用原生分组页，跳过 ChattingUIProxy 浮层: talker=$talker")
                 return
             }
             showGroupPageOverlay(activity, talker)
