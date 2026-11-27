@@ -115,12 +115,10 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
             HideWindowsOnlineSettings.DEFAULT_ENABLE
         )
         if (!enabled) {
-            HLog.e("$TAG 开关未启用")
             hidden.remove(activity)?.let { it.visibility = View.VISIBLE }
             return
         }
         val target = findBanner(decor)
-        HLog.e("$TAG 开关已启用, 提示条=${target?.javaClass?.name}")
         if (target == null) return
         // 只隐藏整行并折叠高度，不能 removeView：从聊天页返回后
         // RecyclerView 会因 item 被移除而留下空白。
@@ -136,9 +134,6 @@ private class HideWindowsOnlineRuntime(private val context: FeatureContext) {
     }
 
     private fun findBanner(view: View): View? {
-        if (view is TextView && view.text?.contains("Windows") == true) {
-            HLog.e("$TAG 候选文本: ${view.text}")
-        }
         if (view is TextView && view.text?.contains("Windows") == true &&
             view.text?.contains("电脑") == true
         ) {

@@ -591,12 +591,25 @@ private class HomeTextColorRuntime(
 
     private fun knownLayoutInflaterFactory(): Method? {
         return runCatching {
-            val clazz = Class.forName(
+            val clazz = KavaReflector.loadClass(
                 "com.tencent.mm.ui.kd",
-                false,
                 context.hostClassLoader()
-            )
-            clazz.declaredMethods.singleOrNull(::isLayoutInflaterFactoryMethod)
+            ) ?: Class.forName("com.tencent.mm.ui.kd", false, context.hostClassLoader())
+            val methods = KavaReflector.declaredMethods(clazz)
+            // 8.0.80 已知类 com.tencent.mm.ui.kd 的 onCreateView 形状在不同热修包上
+            // 可能出现返回类型/声明类判断差异；已知类内只按名称和参数匹配即可。
+            val candidates = methods.filter { method ->
+                method.name == "onCreateView" && method.parameterTypes.size == 3
+            }
+            if (candidates.isEmpty()) {
+                HLog.e(
+                    "$TAG 已知 LayoutInflater.Factory2 类未匹配: " +
+                        "class=${clazz.name} methods=${methods.joinToString(transform = ::methodDescriptor)}"
+                )
+            }
+            candidates.firstOrNull()
+        }.onFailure {
+            HLog.e("$TAG 加载已知 LayoutInflater.Factory2 类失败", it)
         }.getOrNull()
     }
 
